@@ -1,0 +1,316 @@
+{# Pahina para mag-assign ng mga tao at mag-ayos ng mga bahagi ng programa #}
+{% extends "base.html" %}
+
+{% block title %}Edit program · Church Program{% endblock %}
+
+{% block content %}
+
+<a href="{{ url_for('program_detail', program_id=program.id) }}" class="text-sm text-teal-800 hover:underline">Back to
+    program</a>
+
+<div class="mx-auto mt-3 max-w-4xl text-center">
+    <h1 class="text-2xl font-semibold text-slate-900" style="text-align: center !important;">Edit program</h1>
+    <p class="mt-1 text-sm text-slate-600" style="text-align: center !important;">
+        {{ program.program_type.name }} · {{ program.program_date.strftime("%A, %B %d, %Y") }}
+    </p>
+    <p class="mt-2 text-sm text-slate-600" style="text-align: center !important;">
+        Choose a member or enter a guest name. Drag parts to change their order.
+    </p>
+    <p class="mt-1 text-sm text-slate-600" style="text-align: center !important;">
+        Add song titles and lyrics on the <a href="{{ url_for('songs') }}" class="text-teal-800 hover:underline">Songs
+            page</a>, then select a song below.
+    </p>
+</div>
+
+<form method="post" action="{{ url_for('edit_program', program_id=program.id) }}" class="mt-6">
+    <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <table class="w-full text-left text-sm">
+            <thead class="border-b border-slate-200 bg-slate-50 text-slate-600">
+                <tr>
+                    <th class="px-4 py-2 font-medium">Part</th>
+                    <th class="px-4 py-2 font-medium">Member</th>
+                    <th class="px-4 py-2 font-medium">Guest name</th>
+                    <th class="px-4 py-2 font-medium">Song / details</th>
+                </tr>
+            </thead>
+            <tbody id="program-items" class="divide-y divide-slate-100">
+                {% for item in program.items %}
+                {% set member_field = "member_id_" ~ item.id %}
+                {% set guest_field = "guest_name_" ~ item.id %}
+                {% set detail_field = "detail_" ~ item.id %}
+                {% set song_id_field = "song_id_" ~ item.id %}
+                {% set song_title_field = "song_title_" ~ item.id %}
+                {% set selected_member = request.form.get(member_field, item.member_id|string if item.member_id else "")
+                %}
+                <tr class="bg-white" data-item-row>
+                    <td class="px-4 py-3">
+                        <input type="hidden" name="item_id" value="{{ item.id }}">
+                        <div class="flex items-center gap-3">
+                            <button type="button" class="drag-handle cursor-grab text-slate-400 hover:text-teal-800"
+                                aria-label="Drag to reorder {{ item.part_type.name }}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M8 5h.01M16 5h.01M8 12h.01M16 12h.01M8 19h.01M16 19h.01"></path>
+                                </svg>
+                            </button>
+                            <span class="font-medium text-slate-800">{{ item.part_type.name }}</span>
+                        </div>
+                    </td>
+                    <td class="px-4 py-3">
+                        {% set selected_label = "" %}
+                        {% if selected_member %}
+                        {% if item.member and selected_member == item.member.id|string %}
+                        {% set selected_label = item.member.label %}
+                        {% else %}
+                        {% for member in members %}
+                        {% if selected_member == member.id|string %}
+                        {% set selected_label = member.label %}
+                        {% endif %}
+                        {% endfor %}
+                        {% endif %}
+                        {% endif %}
+                        <div class="relative min-w-40" data-member-picker
+                            data-inactive-member-id="{{ item.member.id if item.member and not item.member.is_active else '' }}"
+                            data-inactive-member-label="{{ item.member.label if item.member and not item.member.is_active else '' }}">
+                            <label for="member_search_{{ item.id }}" class="sr-only">Member for {{ item.part_type.name
+                                }}</label>
+                            <input id="member_search_{{ item.id }}" type="text" autocomplete="off" role="combobox"
+                                aria-autocomplete="list" aria-expanded="false"
+                                aria-controls="member_suggestions_{{ item.id }}" value="{{ selected_label }}"
+                                placeholder="Type a member name"
+                                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600"
+                                data-member-search>
+                            <input id="{{ member_field }}" name="{{ member_field }}" type="hidden"
+                                value="{{ selected_member }}">
+                            <div id="member_suggestions_{{ item.id }}" role="listbox"
+                                class="absolute left-0 right-0 top-full z-20 mt-1 hidden max-h-48 overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+                                data-member-suggestions></div>
+                        </div>
+                    </td>
+                    <td class="px-4 py-3">
+                        <label for="{{ guest_field }}" class="sr-only">Guest name for {{ item.part_type.name }}</label>
+                        <input id="{{ guest_field }}" name="{{ guest_field }}" type="text" maxlength="100"
+                            value="{{ request.form.get(guest_field, item.guest_name or '') }}" placeholder="Optional"
+                            class="w-full min-w-40 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                    </td>
+                    <td class="px-4 py-3">
+                        {% if item.part_type.category == "song" %}
+                        <div class="relative min-w-48" data-song-picker>
+                            <label for="song_search_{{ item.id }}" class="sr-only">Song for {{ item.part_type.name
+                                }}</label>
+                            <input id="song_search_{{ item.id }}" name="{{ song_title_field }}" type="text"
+                                autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false"
+                                aria-controls="song_suggestions_{{ item.id }}"
+                                value="{{ request.form.get(song_title_field, item.song.title if item.song else item.detail or '') }}"
+                                placeholder="Optional — type a song title"
+                                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600"
+                                data-song-search>
+                            <input name="{{ song_id_field }}" type="hidden"
+                                value="{{ request.form.get(song_id_field, item.song_id or '') }}">
+                            <div id="song_suggestions_{{ item.id }}" role="listbox"
+                                class="absolute left-0 right-0 top-full z-20 mt-1 hidden max-h-48 overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+                                data-song-suggestions></div>
+                            <a href="#" class="mt-1 hidden text-sm text-teal-800 hover:underline" data-song-lyrics-link
+                                data-song-url="{{ url_for('song_lyrics', song_id=0) }}">
+                                Open lyrics: <span data-song-link-title></span>
+                            </a>
+                        </div>
+                        {% else %}
+                        <label for="{{ detail_field }}" class="sr-only">Details for {{ item.part_type.name }}</label>
+                        <input id="{{ detail_field }}" name="{{ detail_field }}" type="text" maxlength="200"
+                            value="{{ request.form.get(detail_field, item.detail or '') }}" placeholder="Optional"
+                            class="w-full min-w-40 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="mt-4 flex flex-wrap items-center gap-3">
+        <button type="submit"
+            class="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">
+            Save changes
+        </button>
+        <a href="{{ url_for('program_detail', program_id=program.id) }}"
+            class="text-sm text-slate-600 hover:underline">Cancel</a>
+    </div>
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const programItems = document.getElementById("program-items");
+    if (programItems && window.Sortable) {
+        new Sortable(programItems, {
+            animation: 150,
+            handle: ".drag-handle",
+            ghostClass: "bg-teal-50"
+        });
+    }
+
+    const memberOptions = {{ member_options | tojson }};
+    const songOptions = {{ song_options | tojson }};
+
+    function setupAutocomplete(
+        picker, options, searchSelector, hiddenSelector, suggestionSelector, getLabel, onInput, onChoose
+    ) {
+        const searchInput = picker.querySelector(searchSelector);
+        const hiddenInput = picker.querySelector(hiddenSelector);
+        const suggestions = picker.querySelector(suggestionSelector);
+        let activeIndex = -1;
+
+        function closeSuggestions() {
+            suggestions.classList.add("hidden");
+            searchInput.setAttribute("aria-expanded", "false");
+            searchInput.removeAttribute("aria-activedescendant");
+            activeIndex = -1;
+        }
+
+        function chooseOption(option) {
+            searchInput.value = getLabel(option);
+            hiddenInput.value = option.id;
+            if (onChoose) {
+                onChoose(option);
+            }
+            closeSuggestions();
+        }
+
+        function updateActiveOption() {
+            Array.from(suggestions.children).forEach(function (option, index) {
+                option.classList.toggle("bg-teal-50", index === activeIndex);
+            });
+            if (activeIndex >= 0 && suggestions.children[activeIndex]) {
+                searchInput.setAttribute("aria-activedescendant", suggestions.children[activeIndex].id);
+            } else {
+                searchInput.removeAttribute("aria-activedescendant");
+            }
+        }
+
+        function updateSuggestions() {
+            const query = searchInput.value.trim().toLocaleLowerCase();
+            const matches = options.filter(function (option) {
+                return getLabel(option).toLocaleLowerCase().includes(query);
+            });
+            suggestions.replaceChildren();
+
+            matches.forEach(function (option, index) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.role = "option";
+                button.id = suggestions.id + "-option-" + index;
+                button.className = "block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-teal-50";
+                button.textContent = getLabel(option);
+                button.addEventListener("pointerdown", function (event) {
+                    event.preventDefault();
+                    chooseOption(option);
+                });
+                button.addEventListener("mouseenter", function () {
+                    activeIndex = index;
+                    updateActiveOption();
+                });
+                suggestions.appendChild(button);
+            });
+
+            if (matches.length) {
+                suggestions.classList.remove("hidden");
+                searchInput.setAttribute("aria-expanded", "true");
+            } else {
+                closeSuggestions();
+            }
+        }
+
+        searchInput.addEventListener("input", function () {
+            hiddenInput.value = "";
+            if (onInput) {
+                onInput();
+            }
+            updateSuggestions();
+        });
+        searchInput.addEventListener("focus", updateSuggestions);
+        searchInput.addEventListener("keydown", function (event) {
+            const optionsInList = suggestions.children;
+            if (event.key === "ArrowDown" && optionsInList.length) {
+                event.preventDefault();
+                activeIndex = (activeIndex + 1) % optionsInList.length;
+                updateActiveOption();
+            } else if (event.key === "ArrowUp" && optionsInList.length) {
+                event.preventDefault();
+                activeIndex = (activeIndex - 1 + optionsInList.length) % optionsInList.length;
+                updateActiveOption();
+            } else if (event.key === "Enter" && activeIndex >= 0 && optionsInList[activeIndex]) {
+                event.preventDefault();
+                optionsInList[activeIndex].dispatchEvent(new Event("pointerdown"));
+            } else if (event.key === "Escape") {
+                closeSuggestions();
+            }
+        });
+        searchInput.addEventListener("blur", function () {
+            window.setTimeout(closeSuggestions, 100);
+        });
+    }
+
+    document.querySelectorAll("[data-member-picker]").forEach(function (picker) {
+        const memberInput = picker.querySelector('input[type="hidden"]');
+        const itemId = memberInput.name.replace("member_id_", "");
+        const guestInput = document.getElementById("guest_name_" + itemId);
+        const optionsForItem = memberOptions.slice();
+        if (picker.dataset.inactiveMemberId) {
+            optionsForItem.push({
+                id: Number(picker.dataset.inactiveMemberId),
+                label: picker.dataset.inactiveMemberLabel
+            });
+        }
+
+        setupAutocomplete(
+            picker, optionsForItem, "[data-member-search]", 'input[type="hidden"]',
+            "[data-member-suggestions]", function (option) { return option.label; },
+            function () { guestInput.value = ""; },
+            function () { guestInput.value = ""; }
+        );
+
+        guestInput.addEventListener("input", function () {
+            if (guestInput.value.trim()) {
+                memberInput.value = "";
+                picker.querySelector("[data-member-search]").value = "";
+                picker.querySelector("[data-member-suggestions]").classList.add("hidden");
+                picker.querySelector("[data-member-search]").setAttribute("aria-expanded", "false");
+            }
+        });
+    });
+
+    document.querySelectorAll("[data-song-picker]").forEach(function (picker) {
+        const searchInput = picker.querySelector("[data-song-search]");
+        const songInput = picker.querySelector('input[type="hidden"]');
+        const lyricsLink = picker.querySelector("[data-song-lyrics-link]");
+        const lyricsLinkTitle = picker.querySelector("[data-song-link-title]");
+
+        function updateLyricsLink(song) {
+            if (song && searchInput.value.trim() === song.title) {
+                lyricsLink.href = lyricsLink.dataset.songUrl.replace(/0$/, String(song.id));
+                lyricsLinkTitle.textContent = song.title;
+                lyricsLink.classList.remove("hidden");
+            } else {
+                lyricsLink.href = "#";
+                lyricsLinkTitle.textContent = "";
+                lyricsLink.classList.add("hidden");
+            }
+        }
+
+        setupAutocomplete(
+            picker, songOptions, "[data-song-search]", 'input[type="hidden"]',
+            "[data-song-suggestions]", function (option) { return option.title; },
+            function () { updateLyricsLink(null); },
+            function (option) { updateLyricsLink(option); }
+        );
+
+        const selectedSong = songOptions.find(function (song) {
+            return String(song.id) === songInput.value;
+        });
+        updateLyricsLink(selectedSong);
+    });
+</script>
+{% endblock %}

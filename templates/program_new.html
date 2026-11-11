@@ -1,0 +1,84 @@
+{# Form para gumawa ng bagong programa mula sa template #}
+{% extends "base.html" %}
+
+{% block title %}Create program · Church Program{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-md">
+
+    <a href="{{ url_for('programs') }}" class="text-sm text-teal-800 hover:underline">Back to programs</a>
+
+    <div class="mt-3 rounded-lg border border-slate-200 bg-white p-6">
+        <h1 class="text-xl font-semibold text-slate-900">Create program</h1>
+        <p class="mt-1 text-sm text-slate-600">
+            All parts of the program are added automatically. You assign people afterwards.
+        </p>
+
+        <form method="post" action="{{ url_for('new_program') }}" class="mt-6 space-y-4">
+
+            {# Pagpili ng uri ng programa #}
+            <div>
+                <label for="program_type_id" class="block text-sm font-medium text-slate-700">Program type</label>
+                <select id="program_type_id" name="program_type_id" required
+                    class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                    {% for t in types %}
+                    <option value="{{ t.id }}" {% if t.id==form.program_type_id %}selected{% endif %}>{{ t.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {# Petsa. Awtomatikong nilalagay ang susunod na tamang araw #}
+            <div>
+                <label for="program_date" class="block text-sm font-medium text-slate-700">Date</label>
+                <input id="program_date" name="program_date" type="date" required value="{{ form.program_date }}"
+                    class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+            </div>
+
+            {# Ilang linggo ang gagawin nang sabay #}
+            <div>
+                <label for="weeks" class="block text-sm font-medium text-slate-700">Number of weeks</label>
+                <input id="weeks" name="weeks" type="number" min="1" max="12" required value="{{ form.weeks }}"
+                    class="mt-1 w-24 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                <p class="mt-1 text-xs text-slate-500">
+                    Use 1 for a single program. For example, 4 creates this program on the chosen date and the next 3
+                    weeks (up to 12).
+                </p>
+            </div>
+
+            <button type="submit"
+                class="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">
+                Create program
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+
+{# ---------- JavaScript ng pahinang ito (inline) ---------- #}
+{% block scripts %}
+<script>
+    // Ang mga panukalang petsa para sa bawat uri ng programa (galing sa app.py)
+    const defaultDates = {{ default_dates | tojson }};
+
+    const typeSelect = document.getElementById("program_type_id");
+    const dateInput = document.getElementById("program_date");
+
+    // Kung ang petsa ay pinili na ng admin (o galing sa Calendar), huwag na itong palitan
+    let dateEdited = {{ 'true' if date_given else 'false' }};
+
+    // Kapag ang admin mismo ang nagpalit ng petsa, tandaan ito
+    dateInput.addEventListener("input", function () {
+        dateEdited = true;
+    });
+
+    // Kapag nagpalit ng uri ng programa, ilagay ang tamang susunod na petsa
+    // (hal. Sabado para sa Sabbath School), maliban kung pinili na ng admin ang petsa
+    typeSelect.addEventListener("change", function () {
+        if (!dateEdited) {
+            dateInput.value = defaultDates[typeSelect.value];
+        }
+    });
+</script>
+{% endblock %}

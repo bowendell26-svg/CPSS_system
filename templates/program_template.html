@@ -1,0 +1,280 @@
+{# Pahina ito para sa pag-edit ng template ng programa. Ginagamit ang Jinja upang
+ipasok ang datos ng programa at buuin ang mga listahan ng bahagi mula sa server. #}
+{% extends "base.html" %}
+
+{# Itinatakda ang pamagat na ipapakita ng base.html sa browser tab. #}
+{% block title %}Edit program template · Church Program{% endblock %}
+
+{# Nilalaman ng pahina: pamagat, paliwanag, at form para baguhin ang template. #}
+{% block content %}
+<div>
+    {# Link pabalik sa listahan ng mga programa nang hindi nagsa-save ng pagbabago. #}
+    <a href="{{ url_for('programs') }}" class="text-sm text-teal-800 hover:underline">Back to programs</a>
+    <h1 class="mt-3 text-2xl text-center font-semibold text-slate-900">Edit program template</h1>
+    {# Ipinapakita ang pangalan ng uri ng programang kasalukuyang ina-edit. #}
+    <p class="mt-1 text-center text-sm text-slate-600">{{ program_type.name }}</p>
+    <p class="mt-2 text-center text-sm text-slate-600">
+        {# Ipinapaliwanag na ang template ay maaaring palitan, bawasan, o dagdagan;
+        hindi nito binubura sa catalog ang mga custom na bahagi at sa mga susunod
+        na programang gagawin lamang mailalapat ang mga pagbabago. #}
+        Replace a part using its dropdown, remove parts from this template, or add new ones. Removed custom parts remain
+        available in the catalog and other templates. Changes apply to future programs only.
+    </p>
+</div>
+
+{# Ipinapadala ng POST ang binagong pagkakasunod-sunod at pagpili ng mga bahagi sa
+Flask route na edit_program_template para masuri at mai-save sa server. #}
+<form method="post" action="{{ url_for('edit_program_template', program_type_id=program_type.id) }}"
+    class="mx-auto mt-6 max-w-4xl">
+    {# Lalagyan ito ng umiiral na mga bahagi at ng mga bagong row na idaragdag
+    ng JavaScript. Mahalaga ang ID na ito para sa pag-aayos ng pagkakasunod-sunod. #}
+    <div id="template-parts" class="space-y-3">
+        {# Kapag walang laman ang template, magpakita ng paalala sa halip na blangkong lugar. #}
+        {% if not form_rows %}
+        <div id="empty-template-message"
+            class="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-600">
+            This template has no parts yet. Select <strong>Add part</strong> below to build it.
+        </div>
+        {% endif %}
+        {# Bumubuo ng isang editable na card para sa bawat bahagi na ipinasa ng server.
+        Ang row data ang nagtatakda ng kasalukuyang pangalan at napiling opsyon. #}
+        {% for row in form_rows %}
+        <div class="template-part-row rounded-lg border border-slate-200 bg-white p-4">
+            <div class="flex flex-wrap items-start gap-3">
+                <div class="min-w-52 flex-1">
+                    {# Ipinapakita ang kasalukuyang bahagi; ina-update din ito ng JavaScript
+                    kapag pumili ng ibang umiiral na bahagi. #}
+                    <p class="text-sm font-medium text-slate-800">
+                        Current part: <span class="current-part-name">{{ row.part_name }}</span>
+                    </p>
+                    <label class="mt-2 block text-sm font-medium text-slate-700">Replace with</label>
+                    {# Pinipili rito ang papalit na bahagi. Ang name attribute ay ginagamit
+                    ng server sa pagkuha ng bawat value mula sa ipinadalang form. #}
+                    <select name="part_type_id" required
+                        class="part-type-select mt-1 w-3/4 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                        <option value="">Choose a replacement part</option>
+                        {# Inilalagay sa dropdown ang lahat ng karaniwang bahaging maaaring piliin.
+                        Itinatakda ang selected kung tugma ang ID sa kasalukuyang row. #}
+                        {% for part in available_parts %}
+                        <option value="{{ part.id }}" {% if row.part_type_id==part.id|string %}selected{% endif %}>
+                            {{ part.name }}
+                        </option>
+                        {% endfor %}
+                        {# Espesyal na value ito para ipakita ang mga field ng sariling bahagi. #}
+                        <option value="custom" {% if row.part_type_id=="custom" %}selected{% endif %}>
+                            Create a custom part
+                        </option>
+                    </select>
+
+                    {# Nakatagong mga input para sa bagong custom na bahagi. Ipinapakita
+                    lamang ang mga ito kapag pinili ang value na "custom". #}
+                    <div class="custom-part-fields mt-3 space-y-3" hidden>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">Custom part name</label>
+                            {# Limitado sa 50 character ang pangalan; kapag bagong form row,
+                            kinakailangan itong punan bago makapag-save. #}
+                            <input name="custom_name" type="text" maxlength="50" value="{{ row.custom_name }}"
+                                placeholder="For example, Welcome remarks"
+                                class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                        </div>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700">Category</label>
+                                {# Ang mga pinapayagang kategorya ay ipinapasa ng server;
+                                ipinapakita ang kasalukuyang kategorya bilang selected. #}
+                                <select name="custom_category"
+                                    class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                                    {% for category in categories %}
+                                    <option value="{{ category }}" {% if row.custom_category==category %}selected{%
+                                        endif %}>
+                                        {{ category|title }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700">Needs details?</label>
+                                {# Tinutukoy kung mangangailangan ng karagdagang detalye
+                                ang bahaging ito sa mga programang gagawin sa hinaharap. #}
+                                <select name="custom_needs_detail"
+                                    class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                                    <option value="no" {% if row.custom_needs_detail=="no" %}selected{% endif %}>No
+                                    </option>
+                                    <option value="yes" {% if row.custom_needs_detail=="yes" %}selected{% endif %}>Yes
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {# Mga kontrol para ilipat pataas/pababa ang row o alisin ito sa template.
+                Hindi nito direktang binubura ang bahagi sa catalog. #}
+                <div class="flex flex-wrap gap-2">
+                    <button type="button"
+                        class="move-template-part mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700"
+                        data-direction="-1">Move up</button>
+                    <button type="button"
+                        class="move-template-part mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700"
+                        data-direction="1">Move down</button>
+                    <button type="button"
+                        class="remove-template-part mt-1 rounded-md border border-red-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-red-600">
+                        Remove from template
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {# Nakatagong HTML template na kopyahin kapag pinindot ang "Add part".
+    Hindi ito ipinapakita bilang bahagi ng pahina hangga't hindi ito kino-clone. #}
+    <template id="new-template-part">
+        <div class="template-part-row rounded-lg border border-slate-200 bg-white p-4">
+            <div class="flex flex-wrap items-start gap-3">
+                <div class="min-w-52 flex-1">
+                    <label class="block text-sm font-medium text-slate-700">Choose a part to add</label>
+                    {# Bagong bahagi ang pipiliin sa row na ito; maaaring pumili mula sa
+                    mga umiiral na bahagi o gumawa ng custom na bahagi. #}
+                    <select name="part_type_id" required
+                        class="part-type-select mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                        <option value="" selected>Choose a part</option>
+                        {% for part in available_parts %}
+                        <option value="{{ part.id }}">{{ part.name }}</option>
+                        {% endfor %}
+                        <option value="custom">Create a custom part</option>
+                    </select>
+                    {# Kapareho ng custom-part fields sa umiiral na row, ngunit walang
+                    paunang value dahil bagong bahagi pa lamang ito. #}
+                    <div class="custom-part-fields mt-3 space-y-3" hidden>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">Custom part name</label>
+                            <input name="custom_name" type="text" maxlength="50"
+                                placeholder="For example, Welcome remarks"
+                                class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                        </div>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700">Category</label>
+                                {# Ipinapakita ang mga kategoryang pinapayagan ng server;
+                                "other" ang paunang pili para sa bagong custom na bahagi. #}
+                                <select name="custom_category"
+                                    class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                                    {% for category in categories %}
+                                    <option value="{{ category }}" {% if category=="other" %}selected{% endif %}>
+                                        {{ category|title }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700">Needs details?</label>
+                                {# Itinatakda kung kailangan ng mga detalye ang custom na bahagi;
+                                "No" ang default na pagpili para sa bagong row. #}
+                                <select name="custom_needs_detail"
+                                    class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                                    <option value="no" selected>No</option>
+                                    <option value="yes">Yes</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {# Maaaring alisin agad ang bagong row kung nagbago ang isip ng gumagamit. #}
+                <button type="button"
+                    class="remove-template-part mt-1 rounded-md border border-red-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-red-600">
+                    Remove from template
+                </button>
+            </div>
+        </div>
+    </template>
+
+    {# Mga pangunahing aksyon ng form: magdagdag ng row, isumite at i-save ang template,
+    o bumalik sa listahan nang hindi ipinapadala ang mga pagbabago. #}
+    <div class="mt-4 flex flex-wrap items-center gap-3">
+        <button id="add-template-part" type="button"
+            class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">
+            Add part
+        </button>
+        <button type="submit"
+            class="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">
+            Save template
+        </button>
+        <a href="{{ url_for('programs') }}" class="text-sm text-slate-600 hover:underline">Cancel</a>
+    </div>
+</form>
+{% endblock %}
+
+{# JavaScript para sa interaksiyon ng mga row sa browser: pagpapakita ng custom fields,
+pagdaragdag/pagtanggal ng bahagi, at pag-aayos ng pagkakasunod-sunod. #}
+{% block scripts %}
+<script>
+    // Kunin ang lalagyan ng mga row at ang nakatagong hulmahan para sa bagong row.
+    const templateParts = document.getElementById("template-parts");
+    const newPartTemplate = document.getElementById("new-template-part");
+
+    // Ipakita lamang ang mga input para sa custom na bahagi kapag iyon ang pinili.
+    // Ginagawang required ang pangalan sa ganitong sitwasyon; hindi required ang ibang field.
+    function updateCustomFields(row) {
+        const partSelect = row.querySelector(".part-type-select");
+        const customFields = row.querySelector(".custom-part-fields");
+        const isCustomPart = partSelect.value === "custom";
+        customFields.hidden = !isCustomPart;
+        customFields.querySelectorAll("input, select").forEach(function (field) {
+            field.required = isCustomPart && field.name === "custom_name";
+        });
+    }
+
+    // Ikabit sa isang row ang lahat ng event handler nito.
+    // Tinatawag ito kapwa sa mga row mula sa server at sa bagong row na kinopya sa template.
+    function prepareTemplatePart(row) {
+        // Kapag nagbago ang dropdown, i-update ang custom fields at ang tekstong
+        // nagpapakita ng napiling bahagi kung umiiral ang display element na iyon.
+        row.querySelector(".part-type-select").addEventListener("change", function () {
+            updateCustomFields(row);
+            const selectedOption = this.options[this.selectedIndex];
+            const currentPartName = row.querySelector(".current-part-name");
+            if (currentPartName && selectedOption.value && selectedOption.value !== "custom") {
+                currentPartName.textContent = selectedOption.textContent.trim();
+            }
+        });
+
+        // Alisin lamang ang row sa form; ang pag-save ng natitirang row ang mag-a-update
+        // sa template sa server.
+        row.querySelector(".remove-template-part").addEventListener("click", function () {
+            row.remove();
+        });
+
+        // Ilipat ang row nang isang puwesto pataas o pababa batay sa data-direction.
+        // Hindi gagawa ng aksiyon kung wala nang katabing row sa direksiyong iyon.
+        row.querySelectorAll(".move-template-part").forEach(function (button) {
+            button.addEventListener("click", function () {
+                if (button.dataset.direction === "-1" && row.previousElementSibling) {
+                    templateParts.insertBefore(row, row.previousElementSibling);
+                } else if (button.dataset.direction === "1" && row.nextElementSibling) {
+                    templateParts.insertBefore(row.nextElementSibling, row);
+                }
+            });
+        });
+
+        // Itugma agad ang nakatagong/required na estado sa kasalukuyang napiling value.
+        updateCustomFields(row);
+    }
+
+    // Ihanda ang event handlers ng lahat ng row na unang ipinakita ng server.
+    templateParts.querySelectorAll(".template-part-row").forEach(prepareTemplatePart);
+
+    // Kapag pinindot ang Add part, alisin muna ang paalalang walang laman kung naroon,
+    // kopyahin ang laman ng <template>, idagdag ang bagong row, at ikabit ang handlers nito.
+    document.getElementById("add-template-part").addEventListener("click", function () {
+        const emptyMessage = document.getElementById("empty-template-message");
+        if (emptyMessage) {
+            emptyMessage.remove();
+        }
+        const row = newPartTemplate.content.firstElementChild.cloneNode(true);
+        templateParts.appendChild(row);
+        prepareTemplatePart(row);
+    });
+
+</script>
+{% endblock %}

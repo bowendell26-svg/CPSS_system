@@ -1,0 +1,153 @@
+{# Pahina ng mga miyembro: listahan, dagdag, import, at paghahanap #}
+{% extends "base.html" %}
+
+{% block title %}Members · Church Program{% endblock %}
+
+{% block content %}
+
+{# ---------- Pamagat at bilang ng aktibong miyembro ---------- #}
+<div>
+    <h1 class="text-2xl font-semibold text-slate-900">Members</h1>
+    <p class="mt-1 text-sm text-slate-600">{{ active_count }} active member{{ '' if active_count == 1 else 's' }}</p>
+</div>
+
+{# Dalawang kolum sa malapad na screen: forms sa kaliwa, listahan sa kanan #}
+<div class="mt-6 grid gap-6 lg:grid-cols-3">
+
+    {# ================= KALIWA: MGA FORM ================= #}
+    <div class="space-y-6 lg:col-span-1">
+
+        {# ---------- Magdagdag ng isang miyembro ---------- #}
+        <section class="rounded-lg border border-slate-200 bg-white p-4">
+            <h2 class="text-base font-semibold text-slate-900">Add a member</h2>
+
+            <form method="post" action="{{ url_for('add_member') }}" class="mt-4 space-y-3">
+                <div>
+                    <label for="full_name" class="block text-sm font-medium text-slate-700">Full name</label>
+                    <input id="full_name" name="full_name" type="text" required maxlength="100"
+                        class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                </div>
+
+                <div>
+                    <label for="display_name" class="block text-sm font-medium text-slate-700">Short name <span
+                            class="font-normal text-slate-500">(optional)</span></label>
+                    <input id="display_name" name="display_name" type="text" maxlength="50"
+                        class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                    <p class="mt-1 text-xs text-slate-500">Shown on the drag cards and printed programs.</p>
+                </div>
+
+                <div>
+                    <label for="contact_number" class="block text-sm font-medium text-slate-700">Contact number <span
+                            class="font-normal text-slate-500">(optional)</span></label>
+                    <input id="contact_number" name="contact_number" type="text" maxlength="30"
+                        class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                </div>
+
+                <button type="submit"
+                    class="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">
+                    Add member
+                </button>
+            </form>
+        </section>
+
+        {# ---------- Mag-import ng maraming pangalan ---------- #}
+        {# Ang <details> ay nakatiklop hangga't hindi pinipindot ang pamagat #}
+            <details class="rounded-lg border border-slate-200 bg-white p-4" {% if not members and not q %}open{% endif
+                %}>
+                <summary class="cursor-pointer text-base font-semibold text-slate-900">Import many names</summary>
+
+                <form method="post" action="{{ url_for('import_members') }}" class="mt-4 space-y-3">
+                    <div>
+                        <label for="names" class="block text-sm font-medium text-slate-700">One name per line</label>
+                        <textarea id="names" name="names" rows="8" required
+                            placeholder="Juan Dela Cruz&#10;Maria Santos&#10;Pedro Reyes"
+                            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600"></textarea>
+                        <p class="mt-1 text-xs text-slate-500">Names already in the list are skipped.</p>
+                    </div>
+
+                    <button type="submit"
+                        class="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">
+                        Import names
+                    </button>
+                </form>
+            </details>
+    </div>
+
+    {# ================= KANAN: LISTAHAN ================= #}
+    <div class="lg:col-span-2">
+
+        {# ---------- Paghahanap (GET: lalabas sa address ang ?q=...) ---------- #}
+        <form method="get" action="{{ url_for('members') }}" class="flex gap-2">
+            <label for="q" class="sr-only">Search members</label>
+            <input id="q" name="q" type="search" value="{{ q }}" placeholder="Search by name"
+                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+            <button type="submit"
+                class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">
+                Search
+            </button>
+            {# Lalabas lang ang "Clear" kapag may hinahanap #}
+            {% if q %}
+            <a href="{{ url_for('members') }}"
+                class="inline-flex items-center rounded-md px-3 text-sm text-teal-800 hover:underline">Clear</a>
+            {% endif %}
+        </form>
+
+        {# ---------- Kung walang laman ang listahan ---------- #}
+        {% if not members %}
+        <div class="mt-3 rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-600">
+            {% if q %}
+            No members match "{{ q }}".
+            {% else %}
+            No members yet. Add one, or import a list of names.
+            {% endif %}
+        </div>
+
+        {% else %}
+        <div class="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table class="w-full text-left text-sm">
+                <thead class="border-b border-slate-200 bg-slate-50 text-slate-600">
+                    <tr>
+                        <th class="px-4 py-2 font-medium">Name</th>
+                        <th class="px-4 py-2 font-medium">Contact</th>
+                        <th class="px-4 py-2 font-medium">Status</th>
+                        <th class="px-4 py-2"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+
+                    {# Isang row para sa bawat miyembro. Ang deactivated ay mas malabo ang kulay #}
+                    {% for m in members %}
+                    <tr class="{{ '' if m.is_active else 'text-slate-400' }}">
+                        <td class="px-4 py-3">
+                            <div>{{ m.full_name }}</div>
+                            {% if m.display_name %}
+                            <div class="text-xs text-slate-500">Short name: {{ m.display_name }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 whitespace-nowrap">{{ m.contact_number or '' }}</td>
+                        <td class="px-4 py-3">{{ 'Active' if m.is_active else 'Inactive' }}</td>
+                        <td class="px-4 py-3">
+                            <div class="flex justify-end gap-4">
+                                <a href="{{ url_for('edit_member', member_id=m.id) }}"
+                                    class="text-teal-800 hover:underline focus-visible:outline-2 focus-visible:outline-teal-700">Edit</a>
+
+                                {# Ang pag-toggle ay POST (form), hindi simpleng link #}
+                                <form method="post" action="{{ url_for('toggle_member', member_id=m.id) }}">
+                                    <button type="submit"
+                                        class="text-slate-700 hover:underline focus-visible:outline-2 focus-visible:outline-teal-700">
+                                        {{ 'Deactivate' if m.is_active else 'Activate' }}
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
