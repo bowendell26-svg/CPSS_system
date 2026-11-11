@@ -1,97 +1,272 @@
-{# Dashboard: ito ang unang makikita ng admin pagkatapos mag-login #}
 {% extends "base.html" %}
 
 {% block title %}Dashboard · Church Program{% endblock %}
 
 {% block content %}
-
-{# ---------- Pamagat at button na Calendar ---------- #}
-<div class="flex flex-wrap items-center justify-between gap-3">
-    <div>
-        <h1 class="text-2xl font-semibold text-slate-900">Admin Dashboard</h1>
-        <p class="mt-1 text-sm text-slate-600">Welcome, {{ current_user.full_name }}.</p>
-    </div>
-
-    {# Button na may itsura ng kalendaryo (icon + salita) #}
-    <a href="/calendar"
-        class="inline-flex items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">
-        {# Icon ng kalendaryo (SVG) #}
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <rect x="3" y="4" width="18" height="18" rx="2"></rect>
-            <line x1="16" y1="2" x2="16" y2="6"></line>
-            <line x1="8" y1="2" x2="8" y2="6"></line>
-            <line x1="3" y1="10" x2="21" y2="10"></line>
-        </svg>
-        Calendar
-    </a>
-</div>
-
-{# ---------- Mabilis na aksyon ---------- #}
-<div class="mt-6 flex flex-wrap gap-3">
-    <a href="/programs/new"
-        class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">
-        Create program
-    </a>
-    <a href="/members"
-        class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">
-        Manage members
-    </a>
-    <a href="/programs"
-        class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">
-        All programs
-    </a>
-</div>
-
-{# ---------- Mga paparating na programa ---------- #}
-<section class="mt-8">
-    <h2 class="text-lg font-semibold text-slate-900">Upcoming programs</h2>
-
-    {# Kung walang laman ang listahan, ipakita ang paanyaya na gumawa #}
-    {% if not upcoming %}
-    <div class="mt-3 rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-600">
-        No upcoming programs yet. Create a program to start assigning parts.
-    </div>
-
-    {% else %}
-    <div class="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white">
-        <table class="w-full text-left text-sm">
-            <thead class="border-b border-slate-200 bg-slate-50 text-slate-600">
-                <tr>
-                    <th class="px-4 py-2 font-medium">Date</th>
-                    <th class="px-4 py-2 font-medium">Program</th>
-                    <th class="px-4 py-2 font-medium">Status</th>
-                    <th class="px-4 py-2 font-medium">Unassigned parts</th>
-                    <th class="px-4 py-2"></th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-
-                {# Isang row para sa bawat programa. Ang "unassigned" ay galing sa app.py #}
-                {% for program, unassigned in upcoming %}
-                <tr>
-                    <td class="px-4 py-3 whitespace-nowrap">{{ program.program_date.strftime("%a, %b %d, %Y") }}</td>
-                    <td class="px-4 py-3">{{ program.program_type.name }}</td>
-                    <td class="px-4 py-3 capitalize">{{ program.status }}</td>
-                    <td class="px-4 py-3">
-                        {# Kapag may kulang pa, kulay amber; kapag kumpleto na, kulay teal #}
-                        {% if unassigned > 0 %}
-                        <span class="rounded bg-amber-100 px-2 py-0.5 text-amber-900">{{ unassigned }} to assign</span>
-                        {% else %}
-                        <span class="rounded bg-teal-100 px-2 py-0.5 text-teal-900">Complete</span>
-                        {% endif %}
-                    </td>
-                    <td class="px-4 py-3 text-right">
-                        <a href="{{ url_for('program_detail', program_id=program.id) }}"
-                            class="text-teal-800 hover:underline focus-visible:outline-2 focus-visible:outline-teal-700">Open</a>
-                    </td>
-                </tr>
-                {% endfor %}
-
-            </tbody>
-        </table>
-    </div>
+<div class="mx-auto max-w-7xl space-y-8">
+    {% set attention = namespace(count=0) %}
+    {% for program, unassigned in upcoming %}
+    {% if unassigned > 0 %}
+    {% set attention.count = attention.count + 1 %}
     {% endif %}
-</section>
+    {% endfor %}
 
+    <section
+        class="relative isolate overflow-hidden rounded-3xl bg-gradient-to-br from-teal-950 via-teal-900 to-emerald-800 px-6 py-8 text-white shadow-lg sm:px-9 sm:py-10">
+        <div class="absolute -right-16 -top-24 -z-10 h-72 w-72 rounded-full border border-white/10"></div>
+        <div class="absolute -right-4 -top-12 -z-10 h-48 w-48 rounded-full border border-white/10"></div>
+        <div class="absolute -bottom-24 left-1/3 -z-10 h-56 w-56 rounded-full bg-emerald-300/10 blur-3xl"></div>
+
+        <div class="flex flex-col justify-between gap-7 md:flex-row md:items-end">
+            <div>
+                <p class="text-sm font-medium text-emerald-200">CHURCH PROGRAM SCHEDULING</p>
+                <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
+                    Welcome, {{ current_user.full_name }}.
+                </h1>
+                <p class="mt-3 max-w-xl text-sm leading-6 text-teal-50/80 sm:text-base">
+                    Here's your planning overview. Keep upcoming programs organized and ready for your community.
+                </p>
+            </div>
+            <a href="{{ url_for('new_program') }}"
+                class="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-teal-950 shadow-sm transition hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <path d="M12 5v14M5 12h14"></path>
+                </svg>
+                Create a program
+            </a>
+        </div>
+    </section>
+
+    <section aria-label="Program overview" class="grid gap-4 sm:grid-cols-3">
+        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <p class="text-sm font-medium text-slate-500">Upcoming programs</p>
+                    <p class="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{{ upcoming|length }}</p>
+                    <p class="mt-1 text-xs text-slate-500">Next programs on your dashboard</p>
+                </div>
+                <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-50 text-teal-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="17" rx="2"></rect>
+                        <path d="M16 2v4M8 2v4M3 10h18"></path>
+                    </svg>
+                </span>
+            </div>
+        </article>
+        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <p class="text-sm font-medium text-slate-500">Need attention</p>
+                    <p
+                        class="mt-2 text-3xl font-semibold tracking-tight {% if attention.count %}text-amber-700{% else %}text-slate-900{% endif %}">
+                        {{ attention.count }}
+                    </p>
+                    <p class="mt-1 text-xs text-slate-500">Programs with parts to assign</p>
+                </div>
+                <span
+                    class="flex h-11 w-11 items-center justify-center rounded-xl {% if attention.count %}bg-amber-50 text-amber-700{% else %}bg-emerald-50 text-emerald-700{% endif %}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true">
+                        <path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z"></path>
+                        <path d="m9 12 2 2 4-4"></path>
+                    </svg>
+                </span>
+            </div>
+        </article>
+        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <p class="text-sm font-medium text-slate-500">Ready to serve</p>
+                    <p class="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{{ upcoming|length -
+                        attention.count }}</p>
+                    <p class="mt-1 text-xs text-slate-500">Upcoming programs fully assigned</p>
+                </div>
+                <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true">
+                        <path d="m5 12 4 4L19 6"></path>
+                        <circle cx="12" cy="12" r="10"></circle>
+                    </svg>
+                </span>
+            </div>
+        </article>
+    </section>
+
+    <section class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div class="min-w-0">
+            <div class="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                    <p class="text-sm font-medium text-teal-700">YOUR SCHEDULE</p>
+                    <h2 class="mt-1 text-xl font-semibold text-slate-900">Upcoming programs</h2>
+                </div>
+                <a href="{{ url_for('programs') }}"
+                    class="text-sm font-medium text-teal-800 hover:text-teal-950 hover:underline focus-visible:outline-2 focus-visible:outline-teal-700">
+                    View all programs <span aria-hidden="true">→</span>
+                </a>
+            </div>
+
+            {% if not upcoming %}
+            <div class="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
+                <span class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-50 text-teal-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="17" rx="2"></rect>
+                        <path d="M16 2v4M8 2v4M3 10h18M12 14v4M10 16h4"></path>
+                    </svg>
+                </span>
+                <h3 class="mt-4 font-semibold text-slate-900">Your schedule starts here</h3>
+                <p class="mx-auto mt-1 max-w-sm text-sm leading-6 text-slate-600">
+                    There are no upcoming programs yet. Create one to start planning and assigning program parts.
+                </p>
+                <a href="{{ url_for('new_program') }}"
+                    class="mt-5 inline-flex items-center gap-2 rounded-lg bg-teal-800 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-teal-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800">
+                    Create your first program <span aria-hidden="true">→</span>
+                </a>
+            </div>
+            {% else %}
+            <div class="mt-4 space-y-3">
+                {% for program, unassigned in upcoming %}
+                <article
+                    class="group rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-teal-200 hover:shadow-md sm:p-5">
+                    <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
+                        <div class="flex shrink-0 items-center gap-3 sm:w-44">
+                            <div
+                                class="flex h-14 w-14 flex-col items-center justify-center rounded-xl bg-teal-50 text-teal-900">
+                                <span class="text-[10px] font-semibold uppercase tracking-wide text-teal-700">
+                                    {{ program.program_date.strftime("%b") }}
+                                </span>
+                                <span class="text-xl font-bold leading-6">
+                                    {{ program.program_date.strftime("%d") }}
+                                </span>
+                            </div>
+                            <div>
+                                <p class="text-sm font-semibold text-slate-900">
+                                    {{ program.program_date.strftime("%A") }}
+                                </p>
+                                <p class="text-xs text-slate-500">{{ program.program_date.strftime("%Y") }}</p>
+                            </div>
+                        </div>
+
+                        <div class="min-w-0 flex-1">
+                            <h3 class="truncate font-semibold text-slate-900">{{ program.program_type.name }}</h3>
+                            <div class="mt-2 flex flex-wrap items-center gap-2">
+                                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium
+                                    {% if program.status == 'published' %}bg-emerald-50 text-emerald-800
+                                    {% elif program.status == 'done' %}bg-slate-100 text-slate-700
+                                    {% elif program.status == 'cancelled' %}bg-red-50 text-red-700
+                                    {% else %}bg-amber-50 text-amber-800{% endif %}">
+                                    {{ program.status|capitalize }}
+                                </span>
+                                {% if unassigned > 0 %}
+                                <span class="inline-flex items-center gap-1.5 text-xs font-medium text-amber-800">
+                                    <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                                    {{ unassigned }} part{% if unassigned != 1 %}s{% endif %} to assign
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+                                    <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                                    Assignments complete
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <a href="{{ url_for('program_detail', program_id=program.id) }}"
+                            class="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-teal-700 hover:bg-teal-50 hover:text-teal-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">
+                            Open program <span aria-hidden="true">→</span>
+                        </a>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <aside class="space-y-4">
+            <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p class="text-sm font-medium text-teal-700">QUICK ACTIONS</p>
+                <h2 class="mt-1 text-lg font-semibold text-slate-900">Keep things moving</h2>
+                <div class="mt-4 space-y-2">
+                    <a href="{{ url_for('new_program') }}"
+                        class="flex items-center gap-3 rounded-xl border border-slate-200 p-3 transition hover:border-teal-200 hover:bg-teal-50">
+                        <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-100 text-teal-800">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                aria-hidden="true">
+                                <path d="M12 5v14M5 12h14"></path>
+                            </svg>
+                        </span>
+                        <span class="text-sm font-medium text-slate-800">Create a program</span>
+                        <span class="ml-auto text-slate-400" aria-hidden="true">→</span>
+                    </a>
+                    <a href="{{ url_for('calendar') }}"
+                        class="flex items-center gap-3 rounded-xl border border-slate-200 p-3 transition hover:border-teal-200 hover:bg-teal-50">
+                        <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-100 text-sky-800">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                                aria-hidden="true">
+                                <rect x="3" y="4" width="18" height="17" rx="2"></rect>
+                                <path d="M16 2v4M8 2v4M3 10h18"></path>
+                            </svg>
+                        </span>
+                        <span class="text-sm font-medium text-slate-800">Open calendar</span>
+                        <span class="ml-auto text-slate-400" aria-hidden="true">→</span>
+                    </a>
+                    <a href="{{ url_for('members') }}"
+                        class="flex items-center gap-3 rounded-xl border border-slate-200 p-3 transition hover:border-teal-200 hover:bg-teal-50">
+                        <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-800">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                                aria-hidden="true">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="10" cy="7" r="4"></circle>
+                                <path d="M20 8v6M23 11h-6"></path>
+                            </svg>
+                        </span>
+                        <span class="text-sm font-medium text-slate-800">Manage members</span>
+                        <span class="ml-auto text-slate-400" aria-hidden="true">→</span>
+                    </a>
+                    <a href="{{ url_for('songs') }}"
+                        class="flex items-center gap-3 rounded-xl border border-slate-200 p-3 transition hover:border-teal-200 hover:bg-teal-50">
+                        <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100 text-violet-800">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                                aria-hidden="true">
+                                <path d="M9 18V5l12-2v13"></path>
+                                <circle cx="6" cy="18" r="3"></circle>
+                                <circle cx="18" cy="16" r="3"></circle>
+                            </svg>
+                        </span>
+                        <span class="text-sm font-medium text-slate-800">Browse songs</span>
+                        <span class="ml-auto text-slate-400" aria-hidden="true">→</span>
+                    </a>
+                </div>
+            </section>
+
+            <section class="rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 p-5 ring-1 ring-amber-100">
+                <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-white/80 text-amber-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true">
+                        <path
+                            d="M12 3v2M12 19v2M5.64 5.64l1.42 1.42m9.88 9.88 1.42 1.42M3 12h2m14 0h2M5.64 18.36l1.42-1.42m9.88-9.88 1.42-1.42">
+                        </path>
+                        <circle cx="12" cy="12" r="4"></circle>
+                    </svg>
+                </div>
+                <h2 class="mt-3 font-semibold text-amber-950">A little preparation goes a long way</h2>
+                <p class="mt-1 text-sm leading-6 text-amber-900/80">
+                    Review unassigned program parts early so everyone has time to prepare and participate.
+                </p>
+            </section>
+        </aside>
+    </section>
+</div>
 {% endblock %}
