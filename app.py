@@ -398,7 +398,7 @@ def index():
         return redirect(url_for("setup"))
     if current_user.is_authenticated:
         return redirect(url_for("dashboard"))
-    return redirect(url_for("login"))
+    return render_template("index.html")
 
 
 @app.route("/setup", methods=["GET", "POST"])
