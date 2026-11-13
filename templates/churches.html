@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Churches · Mission Admin{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-6xl space-y-6">
+    <section class="rounded-3xl bg-gradient-to-br from-teal-950 via-teal-900 to-emerald-800 px-6 py-8 text-white shadow-lg sm:px-9">
+        <p class="text-sm font-semibold tracking-wide text-emerald-200">MISSION DIRECTORY</p>
+        <div class="mt-2 flex flex-wrap items-end justify-between gap-4">
+            <div>
+                <h1 class="text-3xl font-semibold tracking-tight">Churches &amp; Districts</h1>
+                <p class="mt-2 text-sm text-teal-50/80">Manage local church listings and Superintendent registration codes.</p>
+            </div>
+            <a href="{{ url_for('dashboard') }}" class="rounded-xl border border-white/30 px-4 py-2.5 text-sm font-medium hover:bg-white/10">Mission dashboard</a>
+        </div>
+    </section>
+
+    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <h2 class="text-lg font-semibold text-slate-900">{{ "Edit church" if editing else "Add a church" }}</h2>
+        <form method="post" action="{{ url_for('edit_church', church_id=editing.id) if editing else url_for('churches') }}" class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+                <label for="church-name" class="block text-sm font-medium text-slate-700">Church name</label>
+                <input id="church-name" name="name" required maxlength="120" value="{{ editing.name if editing else '' }}" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+            </div>
+            <div>
+                <label for="church-district" class="block text-sm font-medium text-slate-700">District</label>
+                <input id="church-district" name="district" required maxlength="100" value="{{ editing.district if editing else '' }}" placeholder="District name or number" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+            </div>
+            <div>
+                <label for="registration-code" class="block text-sm font-medium text-slate-700">Registration code</label>
+                <input id="registration-code" name="registration_code" required maxlength="100" value="{{ editing.registration_code if editing else '' }}" autocomplete="off" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                <p class="mt-1 text-xs text-slate-500">Share securely with that church's Superintendent.</p>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="rounded-lg bg-teal-800 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-900">{{ "Save changes" if editing else "Add church" }}</button>
+                {% if editing %}<a href="{{ url_for('churches') }}" class="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Cancel</a>{% endif %}
+            </div>
+        </form>
+    </section>
+
+    <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <h2 class="font-semibold text-slate-900">Registered churches</h2>
+            <span class="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800">{{ churches|length }} total</span>
+        </div>
+        {% if churches %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr><th class="px-5 py-3 font-semibold">Church</th><th class="px-5 py-3 font-semibold">District</th><th class="px-5 py-3 font-semibold">Registration code</th><th class="px-5 py-3"></th></tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for church in churches %}
+                    <tr>
+                        <td class="px-5 py-4 font-medium text-slate-900">{{ church.name }}</td>
+                        <td class="px-5 py-4"><span class="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-800">{{ church.district }}</span></td>
+                        <td class="px-5 py-4 font-mono text-xs text-slate-700">{{ church.registration_code }}</td>
+                        <td class="px-5 py-4">
+                            <div class="flex flex-wrap justify-end gap-2">
+                                <a href="{{ url_for('edit_church', church_id=church.id) }}" class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">Edit</a>
+                                <form method="post" action="{{ url_for('delete_church', church_id=church.id) }}" onsubmit="return confirm('Delete this church and all of its local programs, members, songs, and accounts? This cannot be undone.');">
+                                    <button type="submit" class="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">Delete</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="p-6 text-sm text-slate-600">No churches registered yet. Add the first church above.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

@@ -22,7 +22,7 @@
                 <select id="program_type_id" name="program_type_id" required
                     class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
                     {% for t in types %}
-                    <option value="{{ t.id }}" {% if t.id==form.program_type_id %}selected{% endif %}>{{ t.name }}
+                    <option value="{{ t.id }}" {% if t.id==form.program_type_id %}selected{% endif %}>{{ t.label }}
                     </option>
                     {% endfor %}
                 </select>

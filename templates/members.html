@@ -138,6 +138,11 @@
                                         {{ 'Deactivate' if m.is_active else 'Activate' }}
                                     </button>
                                 </form>
+                                <form method="post" action="{{ url_for('delete_member', member_id=m.id) }}"
+                                    onsubmit="return confirm('Remove this member and clear their program assignments?');">
+                                    <button type="submit"
+                                        class="text-red-700 hover:underline focus-visible:outline-2 focus-visible:outline-red-700">Delete</button>
+                                </form>
                             </div>
                         </td>
                     </tr>

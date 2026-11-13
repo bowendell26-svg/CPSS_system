@@ -106,6 +106,12 @@
             <a href="{{ url_for('programs') }}" {% if request.endpoint in ['programs', 'new_program' , 'program_detail'
                 , 'edit_program' , 'edit_program_template' ] %}aria-current="page" {% endif %}
                 class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['programs', 'new_program', 'program_detail', 'edit_program', 'edit_program_template'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Programs</a>
+            {% if current_user.role == "mission_admin" %}
+            <a href="{{ url_for('churches') }}" {% if request.endpoint in ['churches', 'edit_church', 'delete_church'] %}aria-current="page" {% endif %}
+                class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['churches', 'edit_church', 'delete_church'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Churches</a>
+            <a href="{{ url_for('admins') }}" {% if request.endpoint in ['admins', 'delete_admin'] %}aria-current="page" {% endif %}
+                class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['admins', 'delete_admin'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Mission Admins</a>
+            {% else %}
             <a href="{{ url_for('new_program') }}"
                 class="block rounded-md px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100">Create
                 program</a>
@@ -115,12 +121,10 @@
             <a href="{{ url_for('songs') }}" {% if request.endpoint in ['songs', 'song_lyrics' ] %}aria-current="page"
                 {% endif %}
                 class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['songs', 'song_lyrics'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Songs</a>
+            {% endif %}
             <a href="{{ url_for('settings') }}" {% if request.endpoint in ['settings', 'account_email' ]
                 %}aria-current="page" {% endif %}
                 class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['settings', 'account_email'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Settings</a>
-            <a href="{{ url_for('admins') }}" {% if request.endpoint in ['admins', 'delete_admin' ]
-                %}aria-current="page" {% endif %}
-                class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['admins', 'delete_admin'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Admins</a>
         </nav>
         <div class="border-t border-slate-200 p-3">
             <a href="{{ url_for('logout') }}"

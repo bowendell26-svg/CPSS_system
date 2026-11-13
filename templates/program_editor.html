@@ -11,7 +11,7 @@
 <div class="mx-auto mt-3 max-w-4xl text-center">
     <h1 class="text-2xl font-semibold text-slate-900" style="text-align: center !important;">Edit program</h1>
     <p class="mt-1 text-sm text-slate-600" style="text-align: center !important;">
-        {{ program.program_type.name }} · {{ program.program_date.strftime("%A, %B %d, %Y") }}
+        {{ program.program_type.label }} · {{ program.program_date.strftime("%A, %B %d, %Y") }}
     </p>
     <p class="mt-2 text-sm text-slate-600" style="text-align: center !important;">
         Choose a member or enter a guest name. Drag parts to change their order.
@@ -47,14 +47,14 @@
                         <input type="hidden" name="item_id" value="{{ item.id }}">
                         <div class="flex items-center gap-3">
                             <button type="button" class="drag-handle cursor-grab text-slate-400 hover:text-teal-800"
-                                aria-label="Drag to reorder {{ item.part_type.name }}">
+                                aria-label="Drag to reorder {{ item.part_type.label }}">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none"
                                     stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                     stroke-linejoin="round" aria-hidden="true">
                                     <path d="M8 5h.01M16 5h.01M8 12h.01M16 12h.01M8 19h.01M16 19h.01"></path>
                                 </svg>
                             </button>
-                            <span class="font-medium text-slate-800">{{ item.part_type.name }}</span>
+                            <span class="font-medium text-slate-800">{{ item.part_type.label }}</span>
                         </div>
                     </td>
                     <td class="px-4 py-3">
@@ -73,7 +73,7 @@
                         <div class="relative min-w-40" data-member-picker
                             data-inactive-member-id="{{ item.member.id if item.member and not item.member.is_active else '' }}"
                             data-inactive-member-label="{{ item.member.label if item.member and not item.member.is_active else '' }}">
-                            <label for="member_search_{{ item.id }}" class="sr-only">Member for {{ item.part_type.name
+                            <label for="member_search_{{ item.id }}" class="sr-only">Member for {{ item.part_type.label
                                 }}</label>
                             <input id="member_search_{{ item.id }}" type="text" autocomplete="off" role="combobox"
                                 aria-autocomplete="list" aria-expanded="false"
@@ -89,7 +89,7 @@
                         </div>
                     </td>
                     <td class="px-4 py-3">
-                        <label for="{{ guest_field }}" class="sr-only">Guest name for {{ item.part_type.name }}</label>
+                        <label for="{{ guest_field }}" class="sr-only">Guest name for {{ item.part_type.label }}</label>
                         <input id="{{ guest_field }}" name="{{ guest_field }}" type="text" maxlength="100"
                             value="{{ request.form.get(guest_field, item.guest_name or '') }}" placeholder="Optional"
                             class="w-full min-w-40 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
@@ -97,7 +97,7 @@
                     <td class="px-4 py-3">
                         {% if item.part_type.category == "song" %}
                         <div class="relative min-w-48" data-song-picker>
-                            <label for="song_search_{{ item.id }}" class="sr-only">Song for {{ item.part_type.name
+                            <label for="song_search_{{ item.id }}" class="sr-only">Song for {{ item.part_type.label
                                 }}</label>
                             <input id="song_search_{{ item.id }}" name="{{ song_title_field }}" type="text"
                                 autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false"
@@ -117,7 +117,7 @@
                             </a>
                         </div>
                         {% else %}
-                        <label for="{{ detail_field }}" class="sr-only">Details for {{ item.part_type.name }}</label>
+                        <label for="{{ detail_field }}" class="sr-only">Details for {{ item.part_type.label }}</label>
                         <input id="{{ detail_field }}" name="{{ detail_field }}" type="text" maxlength="200"
                             value="{{ request.form.get(detail_field, item.detail or '') }}" placeholder="Optional"
                             class="w-full min-w-40 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">

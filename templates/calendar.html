@@ -10,12 +10,44 @@
         <h1 class="text-2xl font-semibold text-slate-900">Calendar</h1>
         <p class="mt-1 text-sm text-slate-600">Select a date to view its scheduled programs.</p>
     </div>
+    {% if current_user.role == "church_admin" %}
     <a href="{{ url_for('new_program', date=selected_date.isoformat()) }}"
         class="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">
         Create program
     </a>
+    {% endif %}
 </div>
 
+{% if current_user.role == "mission_admin" %}
+<form method="get" action="{{ url_for('calendar') }}" class="mt-5 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
+    <input type="hidden" name="month" value="{{ month_start.strftime('%Y-%m') }}">
+    <label class="text-xs font-medium text-slate-600">District
+        <select name="district" class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+            <option value="">All districts</option>
+            {% for district in districts %}<option value="{{ district }}" {% if district_filter == district %}selected{% endif %}>{{ district }}</option>{% endfor %}
+        </select>
+    </label>
+    <label class="text-xs font-medium text-slate-600">Church
+        <select name="church_id" class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+            <option value="">All churches</option>
+            {% for church in churches %}<option value="{{ church.id }}" {% if church_filter == church.id %}selected{% endif %}>{{ church.name }} · {{ church.district }}</option>{% endfor %}
+        </select>
+    </label>
+    <label class="text-xs font-medium text-slate-600">Program status
+        <select name="status" class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+            <option value="all" {% if status_filter == "all" %}selected{% endif %}>All</option>
+            <option value="published" {% if status_filter == "published" %}selected{% endif %}>Published</option>
+            <option value="draft" {% if status_filter == "draft" %}selected{% endif %}>Draft</option>
+        </select>
+    </label>
+    <div class="flex items-end gap-2">
+        <button class="rounded-lg bg-teal-800 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-900">Apply filters</button>
+        <a href="{{ url_for('calendar', month=month_start.strftime('%Y-%m')) }}" class="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Reset</a>
+    </div>
+</form>
+{% endif %}
+
+{% if current_user.role == "church_admin" %}
 <section id="monthly-elder" class="mt-6 rounded-lg border border-slate-200 bg-white p-4">
     <h2 class="text-lg font-semibold text-slate-900">Elder assigned for {{ month_start.strftime("%B %Y") }}</h2>
     {% if monthly_elder %}
@@ -41,15 +73,16 @@
     </form>
     <p class="mt-2 text-xs text-slate-500">Clear the name and save to remove this month's assignment.</p>
 </section>
+{% endif %}
 
 <section class="mt-6 rounded-lg border border-slate-200 bg-white p-4">
     <div class="flex items-center justify-between gap-3">
-        <a href="{{ url_for('calendar', month=previous_month.strftime('%Y-%m')) }}" aria-label="Previous month"
+        <a href="{{ url_for('calendar', month=previous_month.strftime('%Y-%m'), district=district_filter, church_id=church_filter, status=status_filter) }}" aria-label="Previous month"
             class="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">
             &larr; Previous
         </a>
         <h2 class="text-lg font-semibold text-slate-900">{{ month_start.strftime("%B %Y") }}</h2>
-        <a href="{{ url_for('calendar', month=next_month.strftime('%Y-%m')) }}" aria-label="Next month"
+        <a href="{{ url_for('calendar', month=next_month.strftime('%Y-%m'), district=district_filter, church_id=church_filter, status=status_filter) }}" aria-label="Next month"
             class="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">
             Next &rarr;
         </a>
@@ -66,7 +99,7 @@
         {% for week in weeks %}
         {% for day in week %}
         {% set day_programs = programs_by_date.get(day.isoformat(), []) %}
-        <a href="{{ url_for('calendar', date=day.isoformat(), _anchor='selected-programs') }}"
+        <a href="{{ url_for('calendar', date=day.isoformat(), district=district_filter, church_id=church_filter, status=status_filter, _anchor='selected-programs') }}"
             aria-current="{{ 'date' if day == selected_date else 'false' }}" class="min-h-20 border-b border-r border-slate-200 p-2 text-sm hover:bg-teal-50 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-teal-700 sm:min-h-24
             {% if day == selected_date %}bg-teal-50 ring-2 ring-inset ring-teal-700
             {% elif day.month != month_start.month %}bg-slate-50 text-slate-400
@@ -78,7 +111,7 @@
             </span>
             <span class="mt-1 hidden text-xs text-slate-600 sm:block">
                 {% for program in day_programs %}
-                {{ program.program_type.name }}{% if not loop.last %}<br>{% endif %}
+                {{ program.program_type.label }}{% if not loop.last %}<br>{% endif %}
                 {% endfor %}
             </span>
             {% endif %}
@@ -96,8 +129,10 @@
             </h2>
             <p class="mt-1 text-sm text-slate-600">Program parts are shown in their scheduled order.</p>
         </div>
+        {% if current_user.role == "church_admin" %}
         <a href="{{ url_for('new_program', date=selected_date.isoformat()) }}"
             class="text-sm text-teal-800 hover:underline">Create for this date</a>
+        {% endif %}
     </div>
 
     {% if not selected_programs %}
@@ -111,14 +146,19 @@
             <div
                 class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
                 <div>
-                    <h3 class="font-semibold text-slate-900">{{ program.program_type.name }}</h3>
+                    <h3 class="font-semibold text-slate-900">{{ program.program_type.label }}</h3>
+                    {% if current_user.role == "mission_admin" %}
+                    <p class="mt-1 text-xs text-teal-800">{{ program.church.name }} · {{ program.church.district }}</p>
+                    {% endif %}
                     <p class="mt-1 text-xs capitalize text-slate-600">Status: {{ program.status }}</p>
                 </div>
                 <div class="flex gap-4 text-sm">
                     <a href="{{ url_for('program_detail', program_id=program.id) }}"
-                        class="text-teal-800 hover:underline">Open</a>
+                        class="text-teal-800 hover:underline">{{ "View (Read-Only)" if current_user.role == "mission_admin" else "Open" }}</a>
+                    {% if current_user.role == "church_admin" %}
                     <a href="{{ url_for('edit_program', program_id=program.id) }}"
                         class="text-teal-800 hover:underline">Edit</a>
+                    {% endif %}
                 </div>
             </div>
 
@@ -134,7 +174,7 @@
                     <tbody class="divide-y divide-slate-100">
                         {% for item in program.items %}
                         <tr>
-                            <td class="px-4 py-3 font-medium text-slate-800">{{ item.part_type.name }}</td>
+                            <td class="px-4 py-3 font-medium text-slate-800">{{ item.part_type.label }}</td>
                             <td class="px-4 py-3">
                                 {% if item.member %}
                                 {{ item.member.label }}
@@ -146,8 +186,12 @@
                             </td>
                             <td class="px-4 py-3 text-slate-600">
                                 {% if item.song %}
+                                {% if current_user.role == "church_admin" %}
                                 <a href="{{ url_for('song_lyrics', song_id=item.song.id) }}"
                                     class="text-teal-800 hover:underline">{{ item.song.title }}</a>
+                                {% else %}
+                                {{ item.song.title }}
+                                {% endif %}
                                 {% else %}
                                 {{ item.detail or '' }}
                                 {% endif %}

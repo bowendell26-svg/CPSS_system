@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Mission Oversight · Church Program{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl space-y-8">
+    <section class="relative isolate overflow-hidden rounded-3xl bg-gradient-to-br from-teal-950 via-teal-900 to-emerald-800 px-6 py-8 text-white shadow-lg sm:px-9 sm:py-10">
+        <div class="absolute -right-16 -top-24 -z-10 h-72 w-72 rounded-full border border-white/10"></div>
+        <div class="absolute -bottom-24 left-1/3 -z-10 h-56 w-56 rounded-full bg-emerald-300/10 blur-3xl"></div>
+        <div class="flex flex-col justify-between gap-6 md:flex-row md:items-end">
+            <div>
+                <p class="text-sm font-semibold tracking-wide text-emerald-200">MISSION ADMIN DASHBOARD</p>
+                <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Mission Oversight &amp; Monitoring</h1>
+                <p class="mt-3 max-w-2xl text-sm leading-6 text-teal-50/80">Read-only oversight of local church schedules, program readiness, and mission-wide updates.</p>
+            </div>
+            <div class="flex flex-wrap gap-3">
+                <a href="#announcements" class="rounded-xl border border-white/30 px-4 py-3 text-sm font-semibold text-white hover:bg-white/10">+ Post Announcement</a>
+                <a href="{{ url_for('churches') }}" class="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-teal-950 shadow-sm hover:bg-emerald-50">+ Add Church</a>
+            </div>
+        </div>
+    </section>
+
+    <section aria-label="Mission overview" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p class="text-sm font-medium text-slate-500">Registered churches</p>
+            <p class="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{{ churches|length }}</p>
+            <p class="mt-1 text-xs text-slate-500">Across all districts</p>
+        </article>
+        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p class="text-sm font-medium text-slate-500">Active districts</p>
+            <p class="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{{ districts|length }}</p>
+            <p class="mt-1 text-xs text-slate-500">Districts represented by a church</p>
+        </article>
+        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p class="text-sm font-medium text-slate-500">Upcoming programs</p>
+            <p class="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{{ total_programs }}</p>
+            <p class="mt-1 text-xs text-slate-500">Across all churches</p>
+        </article>
+        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p class="text-sm font-medium text-slate-500">Programs needing attention</p>
+            <p class="mt-2 text-3xl font-semibold tracking-tight {% if attention_count %}text-amber-700{% else %}text-emerald-700{% endif %}">{{ attention_count }}</p>
+            <p class="mt-1 text-xs text-slate-500">Upcoming schedules with unassigned parts</p>
+        </article>
+    </section>
+
+    <section id="announcements" class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+            <div>
+                <p class="text-sm font-semibold text-teal-700">MISSION BULLETIN</p>
+                <h2 class="mt-1 text-xl font-semibold text-slate-900">Announcements</h2>
+                <p class="mt-1 text-sm text-slate-600">Active announcements appear on every Superintendent dashboard.</p>
+            </div>
+        </div>
+        <form method="post" action="{{ url_for('create_announcement') }}" class="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_2fr_auto]">
+            <label class="sr-only" for="announcement-title">Announcement title</label>
+            <input id="announcement-title" name="title" required maxlength="150" placeholder="Announcement title" class="rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+            <label class="sr-only" for="announcement-content">Announcement content</label>
+            <textarea id="announcement-content" name="content" required maxlength="10000" rows="2" placeholder="Share a mission-wide update..." class="rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600"></textarea>
+            <button type="submit" class="rounded-xl bg-teal-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-900">Post announcement</button>
+        </form>
+
+        <div class="mt-5 grid gap-4 lg:grid-cols-2">
+            {% for announcement in announcements %}
+            <article class="rounded-2xl border {% if announcement.is_active %}border-teal-200 bg-teal-50/60{% else %}border-slate-200 bg-slate-50{% endif %} p-4">
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <span class="rounded-full px-2.5 py-1 text-xs font-semibold {% if announcement.is_active %}bg-emerald-100 text-emerald-800{% else %}bg-slate-200 text-slate-700{% endif %}">{{ "Active" if announcement.is_active else "Hidden" }}</span>
+                    <time class="text-xs text-slate-500">{{ announcement.created_at.strftime("%b %d, %Y") }}</time>
+                </div>
+                <form method="post" action="{{ url_for('create_announcement') }}" class="space-y-2">
+                    <input type="hidden" name="announcement_id" value="{{ announcement.id }}">
+                    <label class="sr-only" for="announcement-title-{{ announcement.id }}">Title</label>
+                    <input id="announcement-title-{{ announcement.id }}" name="title" required maxlength="150" value="{{ announcement.title }}" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                    <label class="sr-only" for="announcement-content-{{ announcement.id }}">Content</label>
+                    <textarea id="announcement-content-{{ announcement.id }}" name="content" required maxlength="10000" rows="3" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-teal-600 focus:outline-2 focus:outline-teal-600">{{ announcement.content }}</textarea>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="submit" class="rounded-lg border border-teal-300 bg-white px-3 py-2 text-xs font-semibold text-teal-900 hover:bg-teal-50">Save changes</button>
+                    </div>
+                </form>
+                <div class="mt-2 flex gap-2">
+                    <form method="post" action="{{ url_for('toggle_announcement', announcement_id=announcement.id) }}">
+                        <button type="submit" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">{{ "Hide" if announcement.is_active else "Publish" }}</button>
+                    </form>
+                    <form method="post" action="{{ url_for('delete_announcement', announcement_id=announcement.id) }}" onsubmit="return confirm('Delete this announcement?');">
+                        <button type="submit" class="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50">Delete</button>
+                    </form>
+                </div>
+            </article>
+            {% else %}
+            <p class="rounded-2xl border border-dashed border-slate-300 p-6 text-sm text-slate-600 lg:col-span-2">No announcements yet. Post an update for local Superintendents above.</p>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div class="min-w-0 space-y-4">
+            <div>
+                <p class="text-sm font-semibold text-teal-700">CHURCH MONITORING</p>
+                <h2 class="mt-1 text-xl font-semibold text-slate-900">Program schedule feed</h2>
+            </div>
+            <form method="get" action="{{ url_for('dashboard') }}" class="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-2 xl:grid-cols-4">
+                <label class="text-xs font-medium text-slate-600">District
+                    <select name="district" class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                        <option value="">All districts</option>
+                        {% for district in districts %}<option value="{{ district }}" {% if district_filter == district %}selected{% endif %}>{{ district }}</option>{% endfor %}
+                    </select>
+                </label>
+                <label class="text-xs font-medium text-slate-600">Church
+                    <select name="church_id" class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                        <option value="">All churches</option>
+                        {% for church in churches %}<option value="{{ church.id }}" {% if church_filter == church.id %}selected{% endif %}>{{ church.name }} · {{ church.district }}</option>{% endfor %}
+                    </select>
+                </label>
+                <label class="text-xs font-medium text-slate-600">Program status
+                    <select name="status" class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                        <option value="all" {% if status_filter == "all" %}selected{% endif %}>All</option>
+                        <option value="published" {% if status_filter == "published" %}selected{% endif %}>Published</option>
+                        <option value="draft" {% if status_filter == "draft" %}selected{% endif %}>Draft</option>
+                    </select>
+                </label>
+                <div class="flex items-end gap-2">
+                    <button class="rounded-lg bg-teal-800 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-900">Apply filters</button>
+                    <a href="{{ url_for('dashboard') }}" class="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Reset</a>
+                </div>
+            </form>
+
+            {% for program, unassigned in upcoming %}
+            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
+                    <div class="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-teal-50 text-teal-900">
+                        <span class="text-[10px] font-semibold uppercase tracking-wide text-teal-700">{{ program.program_date.strftime("%b") }}</span>
+                        <span class="text-xl font-bold leading-6">{{ program.program_date.strftime("%d") }}</span>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h3 class="font-semibold text-slate-900">{{ program.program_type.label }}</h3>
+                            <span class="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-800">{{ program.church.name }}</span>
+                            <span class="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-800">{{ program.church.district }}</span>
+                            <span class="rounded-full px-2.5 py-1 text-xs font-semibold {% if program.status == 'published' %}bg-emerald-50 text-emerald-800{% elif program.status == 'draft' %}bg-amber-50 text-amber-800{% else %}bg-slate-100 text-slate-700{% endif %}">{{ program.status|capitalize }}</span>
+                        </div>
+                        <p class="mt-1 text-sm text-slate-500">{{ program.program_date.strftime("%A, %B %d, %Y") }}</p>
+                        <p class="mt-2 text-xs font-medium {% if unassigned %}text-amber-800{% else %}text-emerald-700{% endif %}">{{ (unassigned|string ~ " parts to assign") if unassigned else "All parts assigned" }}</p>
+                    </div>
+                    <a href="{{ url_for('program_detail', program_id=program.id) }}" class="inline-flex shrink-0 justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-teal-700 hover:bg-teal-50 hover:text-teal-900">View Program (Read-Only)</a>
+                </div>
+            </article>
+            {% else %}
+            <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">No upcoming programs match these filters.</div>
+            {% endfor %}
+        </div>
+
+        <aside class="space-y-4">
+            <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p class="text-sm font-semibold text-teal-700">DISTRICT &amp; CHURCH HEALTH</p>
+                <h2 class="mt-1 text-lg font-semibold text-slate-900">Schedule directory</h2>
+                <div class="mt-4 space-y-4">
+                    {% for summary in district_summary %}
+                    <div>
+                        <div class="flex items-center justify-between gap-2">
+                            <h3 class="font-semibold text-slate-800">{{ summary.name }}</h3>
+                            <span class="text-xs text-slate-500">{{ summary.churches|length }} churches</span>
+                        </div>
+                        <ul class="mt-2 space-y-2">
+                            {% for church in summary.churches %}
+                            <li class="flex items-center justify-between gap-2 text-sm">
+                                <span class="truncate text-slate-700">{{ church.name }}</span>
+                                <span class="text-xs {% if church.id in summary.scheduled_ids %}font-medium text-emerald-700{% else %}text-slate-500{% endif %}">
+                                    {{ "Upcoming schedule" if church.id in summary.scheduled_ids else "No schedule" }}
+                                </span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% else %}
+                    <p class="text-sm text-slate-600">Add a church to begin monitoring districts.</p>
+                    {% endfor %}
+                </div>
+            </section>
+        </aside>
+    </section>
+</div>
+{% endblock %}

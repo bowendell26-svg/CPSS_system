@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}Admins · Church Program{% endblock %}
+{% block title %}Mission Admins · Church Program{% endblock %}
 
 {% block content %}
 <div class="mx-auto max-w-3xl space-y-6">
     <div>
-        <h1 class="text-2xl font-semibold text-slate-900">Admin accounts</h1>
-        <p class="mt-1 text-sm text-slate-600">Create admin accounts and remove accounts that no longer need access.</p>
+        <h1 class="text-2xl font-semibold text-slate-900">Mission Admin accounts</h1>
+        <p class="mt-1 text-sm text-slate-600">Create Mission Admin accounts and remove accounts that no longer need access.</p>
     </div>
 
     <section class="rounded-lg border border-slate-200 bg-white p-6">
-        <h2 class="text-lg font-semibold text-slate-900">Create admin</h2>
+        <h2 class="text-lg font-semibold text-slate-900">Create Mission Admin</h2>
         <form method="post" action="{{ url_for('admins') }}" class="mt-4 grid gap-4 sm:grid-cols-2">
             <div>
                 <label for="full_name" class="block text-sm font-medium text-slate-700">Full name</label>
@@ -43,14 +43,14 @@
             <div class="flex items-end">
                 <button type="submit"
                     class="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">
-                    Create admin
+                    Create Mission Admin
                 </button>
             </div>
         </form>
     </section>
 
     <section class="rounded-lg border border-slate-200 bg-white p-6">
-        <h2 class="text-lg font-semibold text-slate-900">Current admins</h2>
+        <h2 class="text-lg font-semibold text-slate-900">Current Mission Admins</h2>
         <ul class="mt-4 divide-y divide-slate-200">
             {% for admin in admins %}
             <li class="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0 last:pb-0">
@@ -64,7 +64,7 @@
                 </div>
                 {% if admin.id != current_user.id %}
                 <form method="post" action="{{ url_for('delete_admin', admin_id=admin.id) }}"
-                    onsubmit="return confirm('Delete this admin account?');">
+                    onsubmit="return confirm('Delete this Mission Admin account?');">
                     <button type="submit"
                         class="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700">
                         Delete
@@ -75,7 +75,7 @@
                 {% endif %}
             </li>
             {% else %}
-            <li class="py-4 text-sm text-slate-600">No admin accounts found.</li>
+            <li class="py-4 text-sm text-slate-600">No Mission Admin accounts found.</li>
             {% endfor %}
         </ul>
     </section>
