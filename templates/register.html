@@ -7,7 +7,7 @@
     <div>
         <p class="text-sm font-semibold tracking-wide text-teal-700">LOCAL CHURCH ACCOUNT</p>
         <h1 class="mt-1 text-2xl font-semibold text-slate-900">Superintendent &amp; Secretary Sign Up</h1>
-        <p class="mt-2 text-sm leading-6 text-slate-600">Only a church's Superintendent or Secretary may hold a local account. Choose your church and position, then wait for your Mission Admin to verify and approve your registration.</p>
+        <p class="mt-2 text-sm leading-6 text-slate-600">Only a church's Superintendent or Secretary may hold a local account. Choose your church and your position, then wait for your Mission Admin to verify and approve your registration.</p>
     </div>
     {% if not churches %}
     <div class="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Registration is currently unavailable because no churches have been added. Contact your Mission Admin.</div>
@@ -42,10 +42,6 @@
                 <option value="{{ title }}" {% if form.officer_title == title %}selected{% endif %}>{{ title }}</option>
                 {% endfor %}
             </select>
-        </div>
-        <div>
-            <label for="registration_code" class="block text-sm font-medium text-slate-700">Church registration code</label>
-            <input id="registration_code" name="registration_code" required maxlength="100" autocomplete="off" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
         </div>
         <div class="grid gap-4 sm:grid-cols-2">
             <div>
