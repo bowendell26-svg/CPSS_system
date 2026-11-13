@@ -96,6 +96,8 @@ class User(UserMixin, db.Model):
     church_id = db.Column(db.Integer, db.ForeignKey("churches.id"))
     church = db.relationship("Church")
     is_active = db.Column(db.Boolean, default=True)
+    # Superintendent o Secretary; blangko para sa mga lumang account.
+    officer_title = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
 
@@ -568,6 +570,9 @@ def setup():
     return render_template("setup.html", form=form)
 
 
+OFFICER_TITLES = ("Superintendent", "Secretary")
+
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     churches = Church.query.order_by(Church.district, Church.name).all()
@@ -576,6 +581,7 @@ def register():
         "username": "",
         "email": "",
         "church_id": "",
+        "officer_title": "",
     }
 
     if request.method == "POST":
@@ -584,6 +590,7 @@ def register():
         email = request.form.get("email", "").strip().lower()
         church_id = request.form.get("church_id", type=int)
         code = request.form.get("registration_code", "").strip()
+        officer_title = request.form.get("officer_title", "").strip()
         password = request.form.get("password", "")
         confirm = request.form.get("confirm", "")
         form = {
@@ -591,12 +598,15 @@ def register():
             "username": username,
             "email": email,
             "church_id": str(church_id or ""),
+            "officer_title": officer_title,
         }
         church = db.session.get(Church, church_id) if church_id else None
 
         error = None
         if not full_name or len(full_name) > 100:
             error = "Enter a full name of 1 to 100 characters."
+        elif officer_title not in OFFICER_TITLES:
+            error = "Choose whether you are the Superintendent or the Secretary."
         elif len(username) < 3 or len(username) > 50:
             error = "Username must be between 3 and 50 characters."
         elif User.query.filter_by(username=username).first():
@@ -617,6 +627,8 @@ def register():
         if error:
             flash(error, "error")
         else:
+            # Bagong account: hindi pa makaka-login hangga't hindi ito
+            # na-a-approve ng Mission Admin bilang tunay na officer.
             user = User(
                 username=username,
                 full_name=full_name,
@@ -624,14 +636,25 @@ def register():
                 password_hash=generate_password_hash(password),
                 role="church_admin",
                 church_id=church.id,
-                is_active=True,
+                officer_title=officer_title,
+                is_active=False,
             )
             db.session.add(user)
             db.session.commit()
-            flash("Superintendent account created. Please log in.", "success")
+            flash(
+                f"Registration submitted as {church.name}'s {officer_title}. "
+                "A Mission Admin will verify your position and approve your account "
+                "before you can log in.",
+                "success",
+            )
             return redirect(url_for("login"))
 
-    return render_template("register.html", churches=churches, form=form)
+    return render_template(
+        "register.html",
+        churches=churches,
+        form=form,
+        officer_titles=OFFICER_TITLES,
+    )
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -659,7 +682,18 @@ def login():
                 return redirect(next_url)
             return redirect(url_for("dashboard"))
 
-        flash("Invalid username or password.", "error")
+        elif (
+            user
+            and not user.is_active
+            and check_password_hash(user.password_hash, password)
+        ):
+            flash(
+                "Your registration is waiting for Mission Admin approval. "
+                "Please log in once your account has been approved.",
+                "info",
+            )
+        else:
+            flash("Invalid username or password.", "error")
 
     return render_template("login.html", next_url=next_url)
 
@@ -794,6 +828,15 @@ def admins():
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
         confirm = request.form.get("confirm", "")
+
+        # Blangko ang username/password: awtomatikong gumawa ng mga ito.
+        if full_name and not username:
+            username = generate_username(full_name, "missionadmin")
+        generated_password = None
+        if not password:
+            generated_password = generate_password()
+            password = generated_password
+            confirm = generated_password
         form = {"full_name": full_name, "username": username, "email": email}
 
         error = None
@@ -825,7 +868,15 @@ def admins():
             )
             db.session.add(admin)
             db.session.commit()
-            flash("Mission Admin account created.", "success")
+            if generated_password:
+                flash(
+                    f"Mission Admin account created. Username: {admin.username} · "
+                    f"Temporary password: {generated_password} — share it with the admin "
+                    "and ask them to change it after logging in.",
+                    "success",
+                )
+            else:
+                flash("Mission Admin account created.", "success")
             return redirect(url_for("admins"))
 
     admin_list = User.query.filter_by(
@@ -861,6 +912,39 @@ def delete_admin(admin_id):
     return redirect(url_for("admins"))
 
 
+def _code_token(value, length=4):
+    """Maikling uppercase na bahagi ng code, mula sa pangalan (A-Z at 0-9 lang)."""
+    token = "".join(ch for ch in value.upper() if ch.isalnum())
+    return token[:length] or "CH"
+
+
+def generate_church_code(district, name):
+    """Awtomatikong gumagawa ng natatanging registration code mula sa district at church name."""
+    prefix = f"{_code_token(district, 4)}-{_code_token(name, 4)}"
+    while True:
+        candidate = f"{prefix}-{secrets.token_hex(2).upper()}"
+        exists = Church.query.filter(
+            db.func.lower(Church.registration_code) == candidate.lower()
+        ).first()
+        if not exists:
+            return candidate
+
+
+def generate_username(full_name, fallback="admin"):
+    """Awtomatikong gumagawa ng natatanging username mula sa full name."""
+    base = "".join(ch for ch in full_name.lower() if ch.isalnum()) or fallback
+    base = base[:20]
+    while True:
+        candidate = f"{base}{secrets.randbelow(900) + 100}"
+        if not User.query.filter_by(username=candidate).first():
+            return candidate
+
+
+def generate_password():
+    """Ligtas na pansamantalang password (12 characters)."""
+    return secrets.token_urlsafe(9)
+
+
 def validate_church_form(church_id=None):
     name = " ".join(request.form.get("name", "").split())
     district = " ".join(request.form.get("district", "").split())
@@ -871,14 +955,30 @@ def validate_church_form(church_id=None):
         error = "Church names must be between 1 and 120 characters."
     elif not district or len(district) > 100:
         error = "District names must be between 1 and 100 characters."
-    elif not code or len(code) > 100:
-        error = "Registration codes must be between 1 and 100 characters."
-    elif Church.query.filter(
+    elif len(code) > 100:
+        error = "Registration codes must be 100 characters or fewer."
+    elif code and Church.query.filter(
         db.func.lower(Church.registration_code) == code.lower(),
         Church.id != (church_id or -1),
     ).first():
         error = "That registration code is already assigned to a church."
+    elif not code:
+        # Blangko ang code: awtomatikong gumawa mula sa district at church name.
+        code = generate_church_code(district, name)
     return name, district, code, error
+
+
+def officers_by_church():
+    """Nakatalang Superintendent at Secretary ng bawat church, kasama ang pending."""
+    officers = {}
+    records = (
+        User.query.filter(User.role == "church_admin", User.church_id.isnot(None))
+        .order_by(User.officer_title, User.full_name, User.id)
+        .all()
+    )
+    for officer in records:
+        officers.setdefault(officer.church_id, []).append(officer)
+    return officers
 
 
 @app.route("/churches", methods=["GET", "POST"])
@@ -902,7 +1002,11 @@ def churches():
             return redirect(url_for("churches"))
 
     all_churches = Church.query.order_by(Church.district, Church.name).all()
-    return render_template("churches.html", churches=all_churches)
+    return render_template(
+        "churches.html",
+        churches=all_churches,
+        church_officers=officers_by_church(),
+    )
 
 
 @app.route("/churches/<int:church_id>/edit", methods=["GET", "POST"])
@@ -924,6 +1028,7 @@ def edit_church(church_id):
         "churches.html",
         churches=Church.query.order_by(Church.district, Church.name).all(),
         editing=church,
+        church_officers=officers_by_church(),
     )
 
 
@@ -958,6 +1063,41 @@ def delete_church(church_id):
     db.session.commit()
     flash(f"{church_name} and its local data were deleted.", "success")
     return redirect(url_for("churches"))
+
+
+@app.route("/registrations/<int:user_id>/approve", methods=["POST"])
+@mission_admin_required
+def approve_registration(user_id):
+    user = db.get_or_404(User, user_id)
+    if user.role != "church_admin" or not user.church_id:
+        flash("That account is not a local church registration.", "error")
+    elif user.is_active:
+        flash("That account is already approved.", "info")
+    else:
+        user.is_active = True
+        db.session.commit()
+        flash(
+            f"{user.full_name} ({user.officer_title or 'Church Admin'}, "
+            f"{user.church.name}) can now log in.",
+            "success",
+        )
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/registrations/<int:user_id>/reject", methods=["POST"])
+@mission_admin_required
+def reject_registration(user_id):
+    user = db.get_or_404(User, user_id)
+    if user.role != "church_admin" or not user.church_id:
+        flash("That account is not a local church registration.", "error")
+    elif user.is_active:
+        flash("Approved church accounts cannot be rejected here.", "error")
+    else:
+        full_name = user.full_name
+        db.session.delete(user)
+        db.session.commit()
+        flash(f"Registration of {full_name} was rejected and removed.", "success")
+    return redirect(url_for("dashboard"))
 
 
 @app.route("/announcements", methods=["POST"])
@@ -1069,9 +1209,15 @@ def dashboard():
                     if church.id in scheduled_church_ids
                 },
             })
+        pending_registrations = (
+            User.query.filter_by(role="church_admin", is_active=False)
+            .order_by(User.created_at, User.id)
+            .all()
+        )
         return render_template(
             "mission_dashboard.html",
             churches=all_churches,
+            pending_registrations=pending_registrations,
             districts=sorted({church.district for church in all_churches}),
             district_filter=district,
             church_filter=church_id,
@@ -2072,7 +2218,10 @@ def _ensure_scoped_unique_constraint(table_name, old_columns, new_constraint, ne
 
 def migrate_tenant_schema():
     column_additions = {
-        "users": {"church_id": "INTEGER REFERENCES churches(id)"},
+        "users": {
+            "church_id": "INTEGER REFERENCES churches(id)",
+            "officer_title": "VARCHAR(20)",
+        },
         "members": {"church_id": "INTEGER REFERENCES churches(id)"},
         "songs": {"church_id": "INTEGER REFERENCES churches(id)"},
         "program_types": {
