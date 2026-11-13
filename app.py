@@ -6,14 +6,16 @@
 import os
 import calendar as calendar_module
 import re
+import secrets
 import smtplib
+from functools import wraps
 from email.message import EmailMessage
 from datetime import datetime, date, timedelta
 from dotenv import load_dotenv
 load_dotenv()
 
 from flask import (
-    Flask, render_template, redirect, url_for, request, flash, session
+    Flask, abort, render_template, redirect, url_for, request, flash, session
 )
 from flask_sqlalchemy import SQLAlchemy
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -21,7 +23,7 @@ from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
     login_required, current_user
 )
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
@@ -71,6 +73,16 @@ login_manager.login_message_category = "info"
 # 2. MGA TABLE (MODELS)
 # =====================================================================
 
+class Church(db.Model):
+    __tablename__ = "churches"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    district = db.Column(db.String(100), nullable=False)
+    registration_code = db.Column(db.String(100), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
 class User(UserMixin, db.Model):
     """Account ng admin (ang may login)."""
     __tablename__ = "users"
@@ -80,7 +92,9 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)    # hindi kailanman plain na password
     full_name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(254))
-    role = db.Column(db.String(20), default="admin")             # admin
+    role = db.Column(db.String(20), default="church_admin", nullable=False)
+    church_id = db.Column(db.Integer, db.ForeignKey("churches.id"))
+    church = db.relationship("Church")
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
@@ -91,6 +105,7 @@ class Member(db.Model):
     __tablename__ = "members"
 
     id = db.Column(db.Integer, primary_key=True)
+    church_id = db.Column(db.Integer, db.ForeignKey("churches.id"), nullable=False)
     full_name = db.Column(db.String(100), nullable=False)
     display_name = db.Column(db.String(50))               # maikling pangalan
     contact_number = db.Column(db.String(30))
@@ -109,13 +124,20 @@ class ProgramType(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False)
+    display_name = db.Column(db.String(50))
+    church_id = db.Column(db.Integer, db.ForeignKey("churches.id"))
     weekday = db.Column(db.Integer, nullable=False)
 
     template_parts = db.relationship(
         "ProgramTypePart",
         backref="program_type",
         order_by="ProgramTypePart.sort_order",
+        cascade="all, delete-orphan",
     )
+
+    @property
+    def label(self):
+        return self.display_name or self.name
 
 
 class PartType(db.Model):
@@ -123,9 +145,15 @@ class PartType(db.Model):
     __tablename__ = "part_types"
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True, nullable=False)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    display_name = db.Column(db.String(50))
+    church_id = db.Column(db.Integer, db.ForeignKey("churches.id"))
     category = db.Column(db.String(20))                   # song, prayer, talk, report, study
     needs_detail = db.Column(db.Boolean, default=False)   # kailangan ba ng pamagat/paksa
+
+    @property
+    def label(self):
+        return self.display_name or self.name
 
 
 class Song(db.Model):
@@ -133,6 +161,7 @@ class Song(db.Model):
     __tablename__ = "songs"
 
     id = db.Column(db.Integer, primary_key=True)
+    church_id = db.Column(db.Integer, db.ForeignKey("churches.id"), nullable=False)
     title = db.Column(db.String(150), nullable=False)
     lyrics = db.Column(db.Text, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -143,6 +172,7 @@ class ProgramTypePart(db.Model):
     __tablename__ = "program_type_parts"
 
     id = db.Column(db.Integer, primary_key=True)
+    church_id = db.Column(db.Integer, db.ForeignKey("churches.id"))
     program_type_id = db.Column(db.Integer, db.ForeignKey("program_types.id"), nullable=False)
     part_type_id = db.Column(db.Integer, db.ForeignKey("part_types.id"), nullable=False)
     sort_order = db.Column(db.Integer, nullable=False)
@@ -155,10 +185,13 @@ class MonthlyElderAssignment(db.Model):
     """Pangalan ng elder na naka-assign para sa isang partikular na buwan."""
     __tablename__ = "monthly_elder_assignments"
     __table_args__ = (
-        db.UniqueConstraint("year", "month", name="uq_monthly_elder_year_month"),
+        db.UniqueConstraint(
+            "church_id", "year", "month", name="uq_monthly_elder_church_year_month"
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    church_id = db.Column(db.Integer, db.ForeignKey("churches.id"), nullable=False)
     year = db.Column(db.Integer, nullable=False)
     month = db.Column(db.Integer, nullable=False)
     elder_name = db.Column(db.String(100), nullable=False)
@@ -168,10 +201,14 @@ class Program(db.Model):
     """Isang aktwal na programa sa isang petsa."""
     __tablename__ = "programs"
     __table_args__ = (
-        db.UniqueConstraint("program_type_id", "program_date", name="uq_program_type_date"),
+        db.UniqueConstraint(
+            "church_id", "program_type_id", "program_date",
+            name="uq_program_church_type_date",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    church_id = db.Column(db.Integer, db.ForeignKey("churches.id"), nullable=False)
     program_type_id = db.Column(db.Integer, db.ForeignKey("program_types.id"), nullable=False)
     program_date = db.Column(db.Date, nullable=False)
     status = db.Column(db.String(20), default="draft")    # draft, published, done, cancelled
@@ -179,6 +216,7 @@ class Program(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    church = db.relationship("Church")
     program_type = db.relationship("ProgramType")
     items = db.relationship(
         "ProgramItem",
@@ -209,6 +247,18 @@ class ProgramItem(db.Model):
     member = db.relationship("Member")
     song = db.relationship("Song")
     assigner = db.relationship("User")
+
+
+class Announcement(db.Model):
+    __tablename__ = "announcements"
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(150), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    author = db.relationship("User")
 
 
 # =====================================================================
@@ -253,7 +303,13 @@ def seed_defaults():
     for name, (category, needs_detail) in PART_INFO.items():
         part = PartType.query.filter_by(name=name).first()
         if not part:
-            part = PartType(name=name, category=category, needs_detail=needs_detail)
+            part = PartType(
+                name=name,
+                display_name=name,
+                church_id=None,
+                category=category,
+                needs_detail=needs_detail,
+            )
             db.session.add(part)
         parts[name] = part
 
@@ -269,10 +325,14 @@ def seed_defaults():
         ("Friday Program",    4, FRIDAY_PROGRAM),     # Biyernes
     ]
     for name, weekday, part_names in templates:
-        program_type = ProgramType.query.filter_by(name=name).first()
+        program_type = ProgramType.query.filter_by(
+            name=name, church_id=None
+        ).first()
         is_new_type = program_type is None
         if not program_type:
-            program_type = ProgramType(name=name, weekday=weekday)
+            program_type = ProgramType(
+                name=name, display_name=name, weekday=weekday, church_id=None
+            )
             db.session.add(program_type)
             db.session.flush()
 
@@ -281,6 +341,7 @@ def seed_defaults():
 
         for order, part_name in enumerate(part_names, start=1):
             db.session.add(ProgramTypePart(
+                church_id=None,
                 program_type=program_type,
                 part_type=parts[part_name],
                 sort_order=order,
@@ -293,14 +354,20 @@ def seed_defaults():
 # 4. TULONG NA MGA FUNCTION
 # =====================================================================
 
-def create_program_from_template(program_type_id, program_date):
+def create_program_from_template(program_type_id, program_date, church_id):
     existing = Program.query.filter_by(
-        program_type_id=program_type_id, program_date=program_date
+        church_id=church_id,
+        program_type_id=program_type_id,
+        program_date=program_date,
     ).first()
     if existing:
         return None
 
-    program = Program(program_type_id=program_type_id, program_date=program_date)
+    program = Program(
+        church_id=church_id,
+        program_type_id=program_type_id,
+        program_date=program_date,
+    )
     db.session.add(program)
 
     program_type = db.session.get(ProgramType, program_type_id)
@@ -314,8 +381,61 @@ def create_program_from_template(program_type_id, program_date):
     return program
 
 
-def admin_exists():
-    return User.query.filter_by(role="admin").first() is not None
+def mission_admin_exists():
+    return User.query.filter_by(role="mission_admin").first() is not None
+
+
+def mission_admin_required(view):
+    @wraps(view)
+    @login_required
+    def wrapped(*args, **kwargs):
+        if current_user.role != "mission_admin":
+            abort(403)
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def church_admin_required(view):
+    @wraps(view)
+    @login_required
+    def wrapped(*args, **kwargs):
+        if current_user.role != "church_admin" or not current_user.church_id:
+            abort(403)
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def get_local_or_404(model, record_id):
+    return model.query.filter_by(
+        id=record_id, church_id=current_user.church_id
+    ).first_or_404()
+
+
+def local_program_types():
+    return ProgramType.query.filter_by(
+        church_id=current_user.church_id
+    ).order_by(ProgramType.id)
+
+
+def copy_default_templates(church):
+    defaults = ProgramType.query.filter_by(church_id=None).order_by(ProgramType.id).all()
+    for default in defaults:
+        local_type = ProgramType(
+            name=f"{default.name[:35]} [{church.id}]",
+            display_name=default.label,
+            church_id=church.id,
+            weekday=default.weekday,
+        )
+        db.session.add(local_type)
+        db.session.flush()
+        for template_part in default.template_parts:
+            db.session.add(ProgramTypePart(
+                church_id=church.id,
+                program_type_id=local_type.id,
+                part_type_id=template_part.part_type_id,
+                sort_order=template_part.sort_order,
+                is_required=template_part.is_required,
+            ))
 
 
 def count_unassigned(program):
@@ -394,7 +514,7 @@ def load_user(user_id):
 
 @app.route("/")
 def index():
-    if not admin_exists():
+    if not mission_admin_exists() and User.query.count() == 0:
         return redirect(url_for("setup"))
     if current_user.is_authenticated:
         return redirect(url_for("dashboard"))
@@ -403,7 +523,7 @@ def index():
 
 @app.route("/setup", methods=["GET", "POST"])
 def setup():
-    if admin_exists():
+    if User.query.count() > 0:
         return redirect(url_for("login"))
 
     form = {"full_name": "", "username": "", "email": ""}
@@ -438,19 +558,85 @@ def setup():
                 full_name=full_name,
                 email=email,
                 password_hash=generate_password_hash(password),
-                role="admin",
+                role="mission_admin",
             )
             db.session.add(admin)
             db.session.commit()
-            flash("Admin account created. Please log in.", "success")
+            flash("Mission Admin account created. Please log in.", "success")
             return redirect(url_for("login"))
 
     return render_template("setup.html", form=form)
 
 
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    churches = Church.query.order_by(Church.district, Church.name).all()
+    form = {
+        "full_name": "",
+        "username": "",
+        "email": "",
+        "church_id": "",
+    }
+
+    if request.method == "POST":
+        full_name = request.form.get("full_name", "").strip()
+        username = request.form.get("username", "").strip().lower()
+        email = request.form.get("email", "").strip().lower()
+        church_id = request.form.get("church_id", type=int)
+        code = request.form.get("registration_code", "").strip()
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm", "")
+        form = {
+            "full_name": full_name,
+            "username": username,
+            "email": email,
+            "church_id": str(church_id or ""),
+        }
+        church = db.session.get(Church, church_id) if church_id else None
+
+        error = None
+        if not full_name or len(full_name) > 100:
+            error = "Enter a full name of 1 to 100 characters."
+        elif len(username) < 3 or len(username) > 50:
+            error = "Username must be between 3 and 50 characters."
+        elif User.query.filter_by(username=username).first():
+            error = "That username is already in use."
+        elif not is_valid_email(email):
+            error = "Please enter a valid email address."
+        elif User.query.filter_by(email=email).first():
+            error = "That email address is already in use."
+        elif not church or not secrets.compare_digest(
+            code.casefold(), church.registration_code.casefold()
+        ):
+            error = "Choose your church and enter its valid registration code."
+        elif len(password) < 8:
+            error = "Password must be at least 8 characters."
+        elif password != confirm:
+            error = "Passwords do not match."
+
+        if error:
+            flash(error, "error")
+        else:
+            user = User(
+                username=username,
+                full_name=full_name,
+                email=email,
+                password_hash=generate_password_hash(password),
+                role="church_admin",
+                church_id=church.id,
+                is_active=True,
+            )
+            db.session.add(user)
+            db.session.commit()
+            flash("Superintendent account created. Please log in.", "success")
+            return redirect(url_for("login"))
+
+    return render_template("register.html", churches=churches, form=form)
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if not admin_exists():
+    if User.query.count() == 0:
         return redirect(url_for("setup"))
 
     if current_user.is_authenticated:
@@ -482,7 +668,11 @@ def login():
 def forgot_password():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
-        user = User.query.filter_by(email=email, role="admin", is_active=True).first()
+        user = User.query.filter(
+            User.email == email,
+            User.role.in_(("mission_admin", "church_admin")),
+            User.is_active.is_(True),
+        ).first()
 
         if user:
             token = password_reset_serializer(user).dumps(user.id)
@@ -503,7 +693,9 @@ def forgot_password():
 @app.route("/reset-password/<int:user_id>/<token>", methods=["GET", "POST"])
 def reset_password(user_id, token):
     user = db.session.get(User, user_id)
-    if not user or not user.is_active or user.role != "admin" or not user.email:
+    if not user or not user.is_active or user.role not in (
+        "mission_admin", "church_admin"
+    ) or not user.email:
         flash("This password reset link is invalid or has expired.", "error")
         return redirect(url_for("login"))
 
@@ -592,7 +784,7 @@ def settings():
 
 
 @app.route("/admins", methods=["GET", "POST"])
-@login_required
+@mission_admin_required
 def admins():
     form = {"full_name": "", "username": "", "email": ""}
 
@@ -628,29 +820,37 @@ def admins():
                 full_name=full_name,
                 email=email,
                 password_hash=generate_password_hash(password),
-                role="admin",
+                role="mission_admin",
                 is_active=True,
             )
             db.session.add(admin)
             db.session.commit()
-            flash("Admin account created.", "success")
+            flash("Mission Admin account created.", "success")
             return redirect(url_for("admins"))
 
-    admin_list = User.query.filter_by(role="admin").order_by(User.full_name, User.id).all()
+    admin_list = User.query.filter_by(
+        role="mission_admin"
+    ).order_by(User.full_name, User.id).all()
     return render_template("admins.html", form=form, admins=admin_list)
 
 
 @app.route("/admins/<int:admin_id>/delete", methods=["POST"])
-@login_required
+@mission_admin_required
 def delete_admin(admin_id):
     admin = db.get_or_404(User, admin_id)
-    if admin.role != "admin":
-        flash("That account is not an admin.", "error")
+    if admin.role != "mission_admin":
+        flash("That account is not a Mission Admin.", "error")
     elif admin.id == current_user.id:
-        flash("You cannot delete your own admin account.", "error")
-    elif admin.is_active and User.query.filter_by(role="admin", is_active=True).count() <= 1:
-        flash("You cannot delete the last active admin account.", "error")
+        flash("You cannot delete your own Mission Admin account.", "error")
+    elif admin.is_active and User.query.filter_by(
+        role="mission_admin", is_active=True
+    ).count() <= 1:
+        flash("You cannot delete the last active Mission Admin account.", "error")
     else:
+        Announcement.query.filter_by(created_by=admin.id).update(
+            {Announcement.created_by: current_user.id},
+            synchronize_session=False,
+        )
         ProgramItem.query.filter_by(assigned_by=admin.id).update(
             {ProgramItem.assigned_by: None},
             synchronize_session=False,
@@ -659,6 +859,160 @@ def delete_admin(admin_id):
         db.session.commit()
         flash("Admin account deleted.", "success")
     return redirect(url_for("admins"))
+
+
+def validate_church_form(church_id=None):
+    name = " ".join(request.form.get("name", "").split())
+    district = " ".join(request.form.get("district", "").split())
+    code = request.form.get("registration_code", "").strip().upper()
+    error = None
+
+    if not name or len(name) > 120:
+        error = "Church names must be between 1 and 120 characters."
+    elif not district or len(district) > 100:
+        error = "District names must be between 1 and 100 characters."
+    elif not code or len(code) > 100:
+        error = "Registration codes must be between 1 and 100 characters."
+    elif Church.query.filter(
+        db.func.lower(Church.registration_code) == code.lower(),
+        Church.id != (church_id or -1),
+    ).first():
+        error = "That registration code is already assigned to a church."
+    return name, district, code, error
+
+
+@app.route("/churches", methods=["GET", "POST"])
+@mission_admin_required
+def churches():
+    if request.method == "POST":
+        name, district, code, error = validate_church_form()
+        if error:
+            flash(error, "error")
+        else:
+            church = Church(
+                name=name,
+                district=district,
+                registration_code=code,
+            )
+            db.session.add(church)
+            db.session.flush()
+            copy_default_templates(church)
+            db.session.commit()
+            flash(f"{church.name} was added.", "success")
+            return redirect(url_for("churches"))
+
+    all_churches = Church.query.order_by(Church.district, Church.name).all()
+    return render_template("churches.html", churches=all_churches)
+
+
+@app.route("/churches/<int:church_id>/edit", methods=["GET", "POST"])
+@mission_admin_required
+def edit_church(church_id):
+    church = db.get_or_404(Church, church_id)
+    if request.method == "POST":
+        name, district, code, error = validate_church_form(church.id)
+        if error:
+            flash(error, "error")
+        else:
+            church.name = name
+            church.district = district
+            church.registration_code = code
+            db.session.commit()
+            flash("Church details updated.", "success")
+            return redirect(url_for("churches"))
+    return render_template(
+        "churches.html",
+        churches=Church.query.order_by(Church.district, Church.name).all(),
+        editing=church,
+    )
+
+
+@app.route("/churches/<int:church_id>/delete", methods=["POST"])
+@mission_admin_required
+def delete_church(church_id):
+    church = db.get_or_404(Church, church_id)
+    church_name = church.name
+    program_ids = db.session.query(Program.id).filter_by(church_id=church.id)
+    church_user_ids = db.session.query(User.id).filter_by(church_id=church.id)
+    ProgramItem.query.filter(
+        ProgramItem.assigned_by.in_(church_user_ids)
+    ).update({ProgramItem.assigned_by: None}, synchronize_session=False)
+    db.session.query(ProgramItem).filter(
+        ProgramItem.program_id.in_(program_ids)
+    ).delete(synchronize_session=False)
+    Program.query.filter_by(church_id=church.id).delete(synchronize_session=False)
+    ProgramTypePart.query.filter_by(church_id=church.id).delete(
+        synchronize_session=False
+    )
+    ProgramType.query.filter_by(church_id=church.id).delete(
+        synchronize_session=False
+    )
+    PartType.query.filter_by(church_id=church.id).delete(synchronize_session=False)
+    Member.query.filter_by(church_id=church.id).delete(synchronize_session=False)
+    Song.query.filter_by(church_id=church.id).delete(synchronize_session=False)
+    MonthlyElderAssignment.query.filter_by(church_id=church.id).delete(
+        synchronize_session=False
+    )
+    User.query.filter_by(church_id=church.id).delete(synchronize_session=False)
+    db.session.delete(church)
+    db.session.commit()
+    flash(f"{church_name} and its local data were deleted.", "success")
+    return redirect(url_for("churches"))
+
+
+@app.route("/announcements", methods=["POST"])
+@mission_admin_required
+def create_announcement():
+    announcement_id_text = request.form.get("announcement_id", "").strip()
+    try:
+        announcement_id = int(announcement_id_text) if announcement_id_text else None
+    except ValueError:
+        flash("Invalid announcement.", "error")
+        return redirect(url_for("dashboard"))
+    title = " ".join(request.form.get("title", "").split())
+    content = request.form.get("content", "").strip()
+    if not title or len(title) > 150 or not content or len(content) > 10000:
+        flash("Enter a title (up to 150 characters) and content (up to 10,000 characters).", "error")
+    else:
+        if announcement_id:
+            announcement = db.get_or_404(Announcement, announcement_id)
+            announcement.title = title
+            announcement.content = content
+        else:
+            announcement = Announcement(
+                title=title,
+                content=content,
+                created_by=current_user.id,
+                is_active=True,
+            )
+            db.session.add(announcement)
+        db.session.commit()
+        flash(
+            "Mission announcement updated." if announcement_id
+            else "Mission announcement posted.",
+            "success",
+        )
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/announcements/<int:announcement_id>/toggle", methods=["POST"])
+@mission_admin_required
+def toggle_announcement(announcement_id):
+    announcement = db.get_or_404(Announcement, announcement_id)
+    announcement.is_active = not announcement.is_active
+    db.session.commit()
+    flash("Announcement visibility updated.", "success")
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/announcements/<int:announcement_id>/delete", methods=["POST"])
+@mission_admin_required
+def delete_announcement(announcement_id):
+    announcement = db.get_or_404(Announcement, announcement_id)
+    db.session.delete(announcement)
+    db.session.commit()
+    flash("Announcement deleted.", "success")
+    return redirect(url_for("dashboard"))
 
 
 @app.route("/account/email", methods=["GET", "POST"])
@@ -682,17 +1036,107 @@ def logout():
 @app.route("/dashboard")
 @login_required
 def dashboard():
+    if current_user.role not in ("mission_admin", "church_admin"):
+        abort(403)
+    if current_user.role == "mission_admin":
+        district, church_id, status = mission_filter_values()
+        all_churches = Church.query.order_by(Church.district, Church.name).all()
+        filtered_query = apply_program_filters(
+            Program.query.filter(Program.program_date >= date.today()),
+            district, church_id, status,
+        )
+        upcoming = filtered_query.order_by(
+            Program.program_date, Program.id
+        ).all()
+        all_upcoming = Program.query.filter(
+            Program.program_date >= date.today()
+        ).all()
+        attention_count = sum(count_unassigned(program) > 0 for program in all_upcoming)
+        scheduled_church_ids = {program.church_id for program in all_upcoming}
+        district_summary = []
+        for district_name in sorted({church.district for church in all_churches}):
+            district_churches = [
+                church for church in all_churches if church.district == district_name
+            ]
+            district_summary.append({
+                "name": district_name,
+                "churches": district_churches,
+                "scheduled": sum(
+                    church.id in scheduled_church_ids for church in district_churches
+                ),
+                "scheduled_ids": {
+                    church.id for church in district_churches
+                    if church.id in scheduled_church_ids
+                },
+            })
+        return render_template(
+            "mission_dashboard.html",
+            churches=all_churches,
+            districts=sorted({church.district for church in all_churches}),
+            district_filter=district,
+            church_filter=church_id,
+            status_filter=status,
+            upcoming=[(program, count_unassigned(program)) for program in upcoming],
+            total_programs=len(all_upcoming),
+            attention_count=attention_count,
+            announcements=Announcement.query.order_by(
+                Announcement.is_active.desc(), Announcement.created_at.desc()
+            ).all(),
+            district_summary=district_summary,
+        )
+
     programs = (
         Program.query
-        .filter(Program.program_date >= date.today())
+        .filter(
+            Program.church_id == current_user.church_id,
+            Program.program_date >= date.today(),
+        )
         .order_by(Program.program_date)
         .limit(10)
         .all()
     )
 
     upcoming = [(program, count_unassigned(program)) for program in programs]
+    return render_template(
+        "dashboard.html",
+        upcoming=upcoming,
+        announcements=Announcement.query.filter_by(is_active=True).order_by(
+            Announcement.created_at.desc()
+        ).all(),
+    )
 
-    return render_template("dashboard.html", upcoming=upcoming)
+
+def mission_filter_values():
+    district = request.args.get("district", "").strip()
+    church_text = request.args.get("church_id", "").strip()
+    status = request.args.get("status", "all").strip().lower()
+    if status not in {"all", "published", "draft"}:
+        abort(400, description="Choose a valid program status filter.")
+    if church_text:
+        try:
+            church_id = int(church_text)
+        except ValueError:
+            abort(400, description="Choose a valid church.")
+        if not db.session.get(Church, church_id):
+            abort(400, description="Choose a valid church.")
+    else:
+        church_id = None
+    return district, church_id, status
+
+
+def apply_program_filters(query, district, church_id, status):
+    if current_user.role == "church_admin":
+        query = query.filter(Program.church_id == current_user.church_id)
+    elif current_user.role == "mission_admin":
+        if district:
+            query = query.join(Church).filter(Church.district == district)
+        if church_id:
+            query = query.filter(Program.church_id == church_id)
+        if status != "all":
+            query = query.filter(Program.status == status)
+    else:
+        abort(403)
+    return query
 
 
 # =====================================================================
@@ -704,23 +1148,28 @@ def clean_name(raw):
 
 
 def find_member_by_name(full_name, exclude_id=None):
-    query = Member.query.filter(db.func.lower(Member.full_name) == full_name.lower())
+    query = Member.query.filter(
+        Member.church_id == current_user.church_id,
+        db.func.lower(Member.full_name) == full_name.lower(),
+    )
     if exclude_id is not None:
         query = query.filter(Member.id != exclude_id)
     return query.first()
 
 
 @app.route("/members")
-@login_required
+@church_admin_required
 def members():
     q = request.args.get("q", "").strip()
 
-    query = Member.query
+    query = Member.query.filter_by(church_id=current_user.church_id)
     if q:
         query = query.filter(Member.full_name.ilike(f"%{q}%"))
 
     all_members = query.order_by(Member.is_active.desc(), Member.full_name).all()
-    active_count = Member.query.filter_by(is_active=True).count()
+    active_count = Member.query.filter_by(
+        church_id=current_user.church_id, is_active=True
+    ).count()
 
     return render_template(
         "members.html", members=all_members, q=q, active_count=active_count
@@ -728,7 +1177,7 @@ def members():
 
 
 @app.route("/members/add", methods=["POST"])
-@login_required
+@church_admin_required
 def add_member():
     full_name = clean_name(request.form.get("full_name", ""))
     display_name = request.form.get("display_name", "").strip()[:50] or None
@@ -740,6 +1189,7 @@ def add_member():
         flash(f"{full_name} is already in the list.", "error")
     else:
         db.session.add(Member(
+            church_id=current_user.church_id,
             full_name=full_name,
             display_name=display_name,
             contact_number=contact_number,
@@ -751,9 +1201,9 @@ def add_member():
 
 
 @app.route("/members/<int:member_id>/edit", methods=["GET", "POST"])
-@login_required
+@church_admin_required
 def edit_member(member_id):
-    member = db.get_or_404(Member, member_id)
+    member = get_local_or_404(Member, member_id)
 
     form = {
         "full_name": member.full_name,
@@ -784,9 +1234,9 @@ def edit_member(member_id):
 
 
 @app.route("/members/<int:member_id>/toggle", methods=["POST"])
-@login_required
+@church_admin_required
 def toggle_member(member_id):
-    member = db.get_or_404(Member, member_id)
+    member = get_local_or_404(Member, member_id)
     member.is_active = not member.is_active
     db.session.commit()
 
@@ -797,11 +1247,33 @@ def toggle_member(member_id):
     return redirect(url_for("members"))
 
 
+@app.route("/members/<int:member_id>/delete", methods=["POST"])
+@church_admin_required
+def delete_member(member_id):
+    member = get_local_or_404(Member, member_id)
+    member_name = member.full_name
+    ProgramItem.query.filter_by(member_id=member.id).update(
+        {
+            ProgramItem.member_id: None,
+            ProgramItem.assigned_by: None,
+            ProgramItem.assigned_at: None,
+        },
+        synchronize_session=False,
+    )
+    db.session.delete(member)
+    db.session.commit()
+    flash(f"{member_name} was removed from this church's member list.", "success")
+    return redirect(url_for("members"))
+
+
 @app.route("/members/import", methods=["POST"])
-@login_required
+@church_admin_required
 def import_members():
     raw = request.form.get("names", "")
-    existing = {m.full_name.lower() for m in Member.query.all()}
+    existing = {
+        m.full_name.lower()
+        for m in Member.query.filter_by(church_id=current_user.church_id).all()
+    }
 
     added = 0
     skipped = 0
@@ -812,7 +1284,9 @@ def import_members():
         if name.lower() in existing:
             skipped += 1
             continue
-        db.session.add(Member(full_name=name))
+        db.session.add(Member(
+            church_id=current_user.church_id, full_name=name
+        ))
         existing.add(name.lower())
         added += 1
 
@@ -826,14 +1300,14 @@ def import_members():
 
 
 @app.route("/songs", methods=["GET", "POST"])
-@login_required
+@church_admin_required
 def songs():
     selected_song = None
     invalid_song_id = False
     song_id_text = request.form.get("song_id", request.args.get("edit", ""))
     if song_id_text:
         try:
-            selected_song = db.get_or_404(Song, int(song_id_text))
+            selected_song = get_local_or_404(Song, int(song_id_text))
         except ValueError:
             flash("Invalid song.", "error")
             invalid_song_id = True
@@ -843,7 +1317,9 @@ def songs():
         "lyrics": request.form.get("lyrics", selected_song.lyrics if selected_song else ""),
     }
     if invalid_song_id:
-        all_songs = Song.query.order_by(Song.title, Song.id).all()
+        all_songs = Song.query.filter_by(
+            church_id=current_user.church_id
+        ).order_by(Song.title, Song.id).all()
         return render_template(
             "songs.html", songs=all_songs, selected_song=None, form=form
         )
@@ -858,7 +1334,7 @@ def songs():
         elif len(lyrics) > 50000:
             flash("Lyrics must be 50,000 characters or fewer.", "error")
         else:
-            song = selected_song or Song()
+            song = selected_song or Song(church_id=current_user.church_id)
             song.title = title
             song.lyrics = lyrics
             if selected_song is None:
@@ -867,16 +1343,18 @@ def songs():
             flash("Song saved.", "success")
             return redirect(url_for("songs"))
 
-    all_songs = Song.query.order_by(Song.title, Song.id).all()
+    all_songs = Song.query.filter_by(
+        church_id=current_user.church_id
+    ).order_by(Song.title, Song.id).all()
     return render_template(
         "songs.html", songs=all_songs, selected_song=selected_song, form=form
     )
 
 
 @app.route("/songs/<int:song_id>")
-@login_required
+@church_admin_required
 def song_lyrics(song_id):
-    song = db.get_or_404(Song, song_id)
+    song = get_local_or_404(Song, song_id)
     return render_template("song_lyrics.html", song=song)
 
 
@@ -891,17 +1369,27 @@ PROGRAM_STATUSES = ["draft", "published", "done", "cancelled"]
 @login_required
 def programs():
     today = date.today()
+    if current_user.role == "mission_admin":
+        district, church_id, status = mission_filter_values()
+        program_types = []
+    else:
+        district, church_id, status = "", None, "all"
+        program_types = local_program_types().all()
 
     upcoming = (
-        Program.query
-        .filter(Program.program_date >= today)
+        apply_program_filters(
+            Program.query.filter(Program.program_date >= today),
+            district, church_id, status,
+        )
         .order_by(Program.program_date, Program.program_type_id)
         .all()
     )
 
     past = (
-        Program.query
-        .filter(Program.program_date < today)
+        apply_program_filters(
+            Program.query.filter(Program.program_date < today),
+            district, church_id, status,
+        )
         .order_by(Program.program_date.desc())
         .limit(30)
         .all()
@@ -909,22 +1397,37 @@ def programs():
 
     return render_template(
         "programs.html",
-        program_types=ProgramType.query.order_by(ProgramType.id).all(),
+        program_types=program_types,
         upcoming=[(p, count_unassigned(p)) for p in upcoming],
         past=[(p, count_unassigned(p)) for p in past],
+        churches=Church.query.order_by(Church.district, Church.name).all()
+        if current_user.role == "mission_admin" else [],
+        districts=sorted({
+            church.district for church in Church.query.all()
+        }) if current_user.role == "mission_admin" else [],
+        district_filter=district,
+        church_filter=church_id,
+        status_filter=status,
     )
 
 
 @app.route("/program-types/<int:program_type_id>/template", methods=["GET", "POST"])
-@login_required
+@church_admin_required
 def edit_program_template(program_type_id):
-    program_type = db.get_or_404(ProgramType, program_type_id)
-    available_parts = PartType.query.order_by(PartType.name).all()
+    program_type = ProgramType.query.filter_by(
+        id=program_type_id, church_id=current_user.church_id
+    ).first_or_404()
+    available_parts = PartType.query.filter(
+        db.or_(
+            PartType.church_id.is_(None),
+            PartType.church_id == current_user.church_id,
+        )
+    ).order_by(PartType.display_name, PartType.name).all()
     categories = ["song", "prayer", "talk", "report", "study", "other"]
     form_rows = [
         {
             "part_type_id": str(template_part.part_type_id),
-            "part_name": template_part.part_type.name,
+            "part_name": template_part.part_type.label,
             "custom_name": "",
             "custom_category": "other",
             "custom_needs_detail": "no",
@@ -960,7 +1463,7 @@ def edit_program_template(program_type_id):
                 form_rows.append({
                     "part_type_id": part_type_id_value,
                     "part_name": (
-                        parts_by_id[part_type_id_value].name
+                        parts_by_id[part_type_id_value].label
                         if part_type_id_value in parts_by_id
                         else custom_name
                     ),
@@ -981,7 +1484,11 @@ def edit_program_template(program_type_id):
                         error = "Choose whether the custom part needs details."
                         break
                     if PartType.query.filter(
-                        db.func.lower(PartType.name) == normalized_name
+                        db.func.lower(PartType.display_name) == normalized_name,
+                        db.or_(
+                            PartType.church_id.is_(None),
+                            PartType.church_id == current_user.church_id,
+                        ),
                     ).first():
                         error = "A part with that name already exists. Choose it from the list instead."
                         break
@@ -1019,7 +1526,9 @@ def edit_program_template(program_type_id):
                 else:
                     _, name, category, needs_detail = selection
                     part = PartType(
-                        name=name,
+                        name=f"{current_user.church_id}:{name}",
+                        display_name=name,
+                        church_id=current_user.church_id,
                         category=category,
                         needs_detail=needs_detail,
                     )
@@ -1031,6 +1540,7 @@ def edit_program_template(program_type_id):
                 db.session.delete(template_part)
             for sort_order, part in enumerate(ordered_parts, start=1):
                 db.session.add(ProgramTypePart(
+                    church_id=current_user.church_id,
                     program_type_id=program_type.id,
                     part_type_id=part.id,
                     sort_order=sort_order,
@@ -1049,12 +1559,33 @@ def edit_program_template(program_type_id):
     )
 
 
+@app.route("/program-types/<int:program_type_id>/delete", methods=["POST"])
+@church_admin_required
+def delete_program_template(program_type_id):
+    program_type = ProgramType.query.filter_by(
+        id=program_type_id, church_id=current_user.church_id
+    ).first_or_404()
+    if Program.query.filter_by(
+        church_id=current_user.church_id,
+        program_type_id=program_type.id,
+    ).first():
+        flash("This template is used by existing programs and cannot be deleted.", "error")
+    else:
+        template_name = program_type.label
+        db.session.delete(program_type)
+        db.session.commit()
+        flash(f"{template_name} template deleted.", "success")
+    return redirect(url_for("programs"))
+
+
 @app.route("/calendar", methods=["GET", "POST"])
 @login_required
 def calendar():
     today = date.today()
 
     if request.method == "POST":
+        if current_user.role != "church_admin":
+            abort(403)
         month_text = request.form.get("month", "")
         try:
             assignment_month = datetime.strptime(month_text, "%Y-%m").date()
@@ -1072,6 +1603,7 @@ def calendar():
             ))
 
         assignment = MonthlyElderAssignment.query.filter_by(
+            church_id=current_user.church_id,
             year=assignment_month.year,
             month=assignment_month.month,
         ).first()
@@ -1080,6 +1612,7 @@ def calendar():
                 assignment.elder_name = elder_name
             else:
                 db.session.add(MonthlyElderAssignment(
+                    church_id=current_user.church_id,
                     year=assignment_month.year,
                     month=assignment_month.month,
                     elder_name=elder_name,
@@ -1131,11 +1664,17 @@ def calendar():
     weeks = calendar_module.Calendar(firstweekday=0).monthdatescalendar(
         month_start.year, month_start.month
     )
+    if current_user.role == "mission_admin":
+        district, church_id, status = mission_filter_values()
+    else:
+        district, church_id, status = "", None, "all"
     month_programs = (
-        Program.query
-        .filter(
+        apply_program_filters(
+            Program.query.filter(
             Program.program_date >= month_start,
             Program.program_date < next_month,
+            ),
+            district, church_id, status,
         )
         .order_by(Program.program_date, Program.program_type_id)
         .all()
@@ -1145,15 +1684,20 @@ def calendar():
         programs_by_date.setdefault(program.program_date.isoformat(), []).append(program)
 
     selected_programs = (
-        Program.query
-        .filter_by(program_date=selected_date)
+        apply_program_filters(
+            Program.query.filter_by(program_date=selected_date),
+            district, church_id, status,
+        )
         .order_by(Program.program_type_id)
         .all()
     )
-    monthly_elder = MonthlyElderAssignment.query.filter_by(
-        year=month_start.year,
-        month=month_start.month,
-    ).first()
+    monthly_elder = None
+    if current_user.role == "church_admin":
+        monthly_elder = MonthlyElderAssignment.query.filter_by(
+            church_id=current_user.church_id,
+            year=month_start.year,
+            month=month_start.month,
+        ).first()
 
     return render_template(
         "calendar.html",
@@ -1165,13 +1709,23 @@ def calendar():
         programs_by_date=programs_by_date,
         selected_programs=selected_programs,
         monthly_elder=monthly_elder,
+        districts=sorted({church.district for church in Church.query.all()})
+        if current_user.role == "mission_admin" else [],
+        churches=Church.query.order_by(Church.district, Church.name).all()
+        if current_user.role == "mission_admin" else [],
+        district_filter=district,
+        church_filter=church_id,
+        status_filter=status,
     )
 
 
 @app.route("/programs/new", methods=["GET", "POST"])
-@login_required
+@church_admin_required
 def new_program():
-    types = ProgramType.query.order_by(ProgramType.id).all()
+    types = local_program_types().all()
+    if not types:
+        flash("This church has no program templates configured.", "error")
+        return redirect(url_for("programs"))
     default_dates = {t.id: next_date_for_weekday(t.weekday).isoformat() for t in types}
 
     type_id = request.args.get("type", type=int) or types[0].id
@@ -1191,7 +1745,9 @@ def new_program():
         form = {"program_type_id": type_id, "program_date": date_text, "weeks": weeks}
         date_given = True
 
-        program_type = db.session.get(ProgramType, type_id) if type_id else None
+        program_type = ProgramType.query.filter_by(
+            id=type_id, church_id=current_user.church_id
+        ).first() if type_id else None
 
         try:
             start_date = datetime.strptime(date_text, "%Y-%m-%d").date()
@@ -1213,7 +1769,9 @@ def new_program():
             skipped = 0
             for week in range(weeks):
                 program = create_program_from_template(
-                    program_type.id, start_date + timedelta(weeks=week)
+                    program_type.id,
+                    start_date + timedelta(weeks=week),
+                    current_user.church_id,
                 )
                 if program:
                     created.append(program)
@@ -1242,7 +1800,7 @@ def new_program():
 @app.route("/programs/<int:program_id>")
 @login_required
 def program_detail(program_id):
-    program = db.get_or_404(Program, program_id)
+    program = get_visible_program_or_404(program_id)
     return render_template(
         "program_detail.html",
         program=program,
@@ -1251,20 +1809,31 @@ def program_detail(program_id):
     )
 
 
+def get_visible_program_or_404(program_id):
+    query = Program.query.filter_by(id=program_id)
+    if current_user.role == "church_admin":
+        query = query.filter_by(church_id=current_user.church_id)
+    elif current_user.role != "mission_admin":
+        abort(403)
+    return query.first_or_404()
+
+
 @app.route("/programs/<int:program_id>/edit", methods=["GET", "POST"])
-@login_required
+@church_admin_required
 def edit_program(program_id):
-    program = db.get_or_404(Program, program_id)
+    program = get_local_or_404(Program, program_id)
     members = (
         Member.query
-        .filter_by(is_active=True)
+        .filter_by(church_id=current_user.church_id, is_active=True)
         .order_by(Member.full_name)
         .all()
     )
     member_options = [{"id": member.id, "label": member.label} for member in members]
     song_options = [
         {"id": song.id, "title": song.title}
-        for song in Song.query.order_by(Song.title, Song.id).all()
+        for song in Song.query.filter_by(
+            church_id=current_user.church_id
+        ).order_by(Song.title, Song.id).all()
     ]
 
     if request.method == "POST":
@@ -1314,7 +1883,7 @@ def edit_program(program_id):
                 error = "Please choose a valid song."
                 break
 
-            song = db.session.get(Song, song_id) if song_id else None
+            song = get_local_or_404(Song, song_id) if song_id else None
             if song_id is not None and (
                 not is_song_part or not song or song.title != song_title
             ):
@@ -1333,7 +1902,7 @@ def edit_program(program_id):
                 error = "Please choose a valid member."
                 break
 
-            member = db.session.get(Member, member_id) if member_id else None
+            member = get_local_or_404(Member, member_id) if member_id else None
             if member_id is not None and (
                 not member
                 or (not member.is_active and item.member_id != member.id)
@@ -1377,9 +1946,9 @@ def edit_program(program_id):
 
 
 @app.route("/programs/<int:program_id>/status", methods=["POST"])
-@login_required
+@church_admin_required
 def update_program_status(program_id):
-    program = db.get_or_404(Program, program_id)
+    program = get_local_or_404(Program, program_id)
     status = request.form.get("status", "")
 
     if status in PROGRAM_STATUSES:
@@ -1392,9 +1961,9 @@ def update_program_status(program_id):
 
 
 @app.route("/programs/<int:program_id>/delete", methods=["POST"])
-@login_required
+@church_admin_required
 def delete_program(program_id):
-    program = db.get_or_404(Program, program_id)
+    program = get_local_or_404(Program, program_id)
     db.session.delete(program)
     db.session.commit()
     flash("Program deleted.", "success")
@@ -1402,29 +1971,274 @@ def delete_program(program_id):
 
 
 # =====================================================================
-# 9. SIMULAN ANG APP
+# 9. DATABASE MIGRATIONS AND APP STARTUP
 # =====================================================================
 
-with app.app_context():
-    db.create_all()
-    user_columns = {
-        column["name"] for column in inspect(db.engine).get_columns("users")
-    }
-    if "email" not in user_columns:
-        with db.engine.begin() as connection:
-            connection.exec_driver_sql("ALTER TABLE users ADD COLUMN email VARCHAR(254)")
-    program_item_columns = {
-        column["name"] for column in inspect(db.engine).get_columns("program_items")
-    }
-    if "song_id" not in program_item_columns:
-        with db.engine.begin() as connection:
+def _sqlite_rebuild_scoped_unique_table(table_name, new_table_sql, columns):
+    with db.engine.connect() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        connection.commit()
+        transaction = connection.begin()
+        try:
+            connection.exec_driver_sql(new_table_sql)
+            column_list = ", ".join(columns)
             connection.exec_driver_sql(
-                "ALTER TABLE program_items ADD COLUMN song_id INTEGER REFERENCES songs(id)"
+                f"INSERT INTO {table_name}_new ({column_list}) "
+                f"SELECT {column_list} FROM {table_name}"
             )
+            connection.exec_driver_sql(f"DROP TABLE {table_name}")
+            connection.exec_driver_sql(
+                f"ALTER TABLE {table_name}_new RENAME TO {table_name}"
+            )
+            transaction.commit()
+        except Exception:
+            transaction.rollback()
+            raise
+        finally:
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            connection.commit()
+
+
+def _ensure_scoped_unique_constraint(table_name, old_columns, new_constraint, new_columns):
+    constraints = inspect(db.engine).get_unique_constraints(table_name)
+    if not any(set(item.get("column_names") or []) == set(new_columns) for item in constraints):
+        old_constraint = next(
+            (
+                item for item in constraints
+                if set(item.get("column_names") or []) == set(old_columns)
+            ),
+            None,
+        )
+        if db.engine.dialect.name == "sqlite":
+            if old_constraint:
+                if table_name == "programs":
+                    columns = [
+                        "id", "church_id", "program_type_id", "program_date",
+                        "status", "notes", "created_at", "updated_at",
+                    ]
+                    create_sql = """
+                        CREATE TABLE programs_new (
+                            id INTEGER NOT NULL PRIMARY KEY,
+                            church_id INTEGER NOT NULL REFERENCES churches(id),
+                            program_type_id INTEGER NOT NULL REFERENCES program_types(id),
+                            program_date DATE NOT NULL,
+                            status VARCHAR(20),
+                            notes TEXT,
+                            created_at DATETIME,
+                            updated_at DATETIME,
+                            CONSTRAINT uq_program_church_type_date
+                                UNIQUE (church_id, program_type_id, program_date)
+                        )
+                    """
+                else:
+                    columns = ["id", "church_id", "year", "month", "elder_name"]
+                    create_sql = """
+                        CREATE TABLE monthly_elder_assignments_new (
+                            id INTEGER NOT NULL PRIMARY KEY,
+                            church_id INTEGER NOT NULL REFERENCES churches(id),
+                            year INTEGER NOT NULL,
+                            month INTEGER NOT NULL,
+                            elder_name VARCHAR(100) NOT NULL,
+                            CONSTRAINT uq_monthly_elder_church_year_month
+                                UNIQUE (church_id, year, month)
+                        )
+                    """
+                _sqlite_rebuild_scoped_unique_table(table_name, create_sql, columns)
+            else:
+                with db.engine.begin() as connection:
+                    quoted_columns = ", ".join(
+                        db.engine.dialect.identifier_preparer.quote(column)
+                        for column in new_columns
+                    )
+                    connection.exec_driver_sql(
+                        f"CREATE UNIQUE INDEX IF NOT EXISTS {new_constraint} "
+                        f"ON {table_name} ({quoted_columns})"
+                    )
+        else:
+            quote = db.engine.dialect.identifier_preparer.quote
+            with db.engine.begin() as connection:
+                if old_constraint:
+                    connection.exec_driver_sql(
+                        f"ALTER TABLE {quote(table_name)} "
+                        f"DROP CONSTRAINT {quote(old_constraint['name'])}"
+                    )
+                constraint_columns = ", ".join(quote(column) for column in new_columns)
+                connection.exec_driver_sql(
+                    f"ALTER TABLE {quote(table_name)} "
+                    f"ADD CONSTRAINT {quote(new_constraint)} "
+                    f"UNIQUE ({constraint_columns})"
+                )
+
+
+def migrate_tenant_schema():
+    column_additions = {
+        "users": {"church_id": "INTEGER REFERENCES churches(id)"},
+        "members": {"church_id": "INTEGER REFERENCES churches(id)"},
+        "songs": {"church_id": "INTEGER REFERENCES churches(id)"},
+        "program_types": {
+            "church_id": "INTEGER REFERENCES churches(id)",
+            "display_name": "VARCHAR(50)",
+        },
+        "program_type_parts": {"church_id": "INTEGER REFERENCES churches(id)"},
+        "monthly_elder_assignments": {
+            "church_id": "INTEGER REFERENCES churches(id)"
+        },
+        "programs": {"church_id": "INTEGER REFERENCES churches(id)"},
+        "program_items": {"song_id": "INTEGER REFERENCES songs(id)"},
+        "part_types": {
+            "church_id": "INTEGER REFERENCES churches(id)",
+            "display_name": "VARCHAR(50)",
+        },
+    }
+
+    with db.engine.begin() as connection:
+        for table_name, additions in column_additions.items():
+            columns = {
+                column["name"] for column in inspect(db.engine).get_columns(table_name)
+            }
+            for name, definition in additions.items():
+                if name not in columns:
+                    connection.exec_driver_sql(
+                        f"ALTER TABLE {table_name} ADD COLUMN {name} {definition}"
+                    )
+
+    churches_exist = Church.query.first() is not None
+    legacy_data_exists = any(
+        db.session.execute(text(f"SELECT 1 FROM {table_name} LIMIT 1")).first()
+        for table_name in (
+            "users", "members", "songs", "program_types",
+            "programs", "monthly_elder_assignments", "part_types",
+        )
+    )
+    if not churches_exist and legacy_data_exists:
+        legacy_church = Church(
+            name="Legacy Church",
+            district="Unassigned District",
+            registration_code=secrets.token_urlsafe(24).upper(),
+        )
+        db.session.add(legacy_church)
+        db.session.flush()
+        church_id = legacy_church.id
+        db.session.commit()
+        with db.engine.begin() as connection:
+            for table_name in (
+                "members", "songs", "programs", "monthly_elder_assignments"
+            ):
+                connection.execute(
+                    text(
+                    f"UPDATE {table_name} SET church_id = :church_id "
+                    "WHERE church_id IS NULL"
+                    ),
+                    {"church_id": church_id},
+                )
+            connection.execute(
+                text(
+                "UPDATE program_types SET church_id = :church_id, "
+                "display_name = name WHERE church_id IS NULL"
+                ),
+                {"church_id": church_id},
+            )
+            connection.execute(
+                text(
+                "UPDATE program_type_parts SET church_id = :church_id "
+                "WHERE church_id IS NULL"
+                ),
+                {"church_id": church_id},
+            )
+            connection.exec_driver_sql(
+                "UPDATE users SET role = 'mission_admin', church_id = NULL "
+                "WHERE role = 'admin'"
+            )
+            connection.execute(
+                text(
+                "UPDATE users SET role = 'church_admin', church_id = :church_id "
+                "WHERE role NOT IN ('mission_admin', 'church_admin') OR role IS NULL"
+                ),
+                {"church_id": church_id},
+            )
+            connection.execute(
+                text(
+                "UPDATE users SET church_id = :church_id "
+                "WHERE role = 'church_admin' AND church_id IS NULL"
+                ),
+                {"church_id": church_id},
+            )
+            # Keep old church templates attached to their data while freeing the
+            # original names for the shared master template catalog.
+            connection.execute(
+                text(
+                "UPDATE program_types SET "
+                "name = substr(name, 1, 36) || ' [legacy ' || id || ']' "
+                "WHERE church_id = :church_id"
+                ),
+                {"church_id": church_id},
+            )
+        db.session.commit()
+
+    legacy_church = Church.query.filter_by(name="Legacy Church").first()
+    if legacy_church:
+        for part in PartType.query.filter_by(church_id=None).all():
+            part.display_name = part.display_name or part.name
+            if part.name not in PART_INFO:
+                part.church_id = legacy_church.id
+        db.session.commit()
+        with db.engine.begin() as connection:
+            for table_name in (
+                "members", "songs", "programs", "monthly_elder_assignments"
+            ):
+                connection.execute(
+                    text(
+                    f"UPDATE {table_name} SET church_id = :church_id "
+                    "WHERE church_id IS NULL"
+                    ),
+                    {"church_id": legacy_church.id},
+                )
+            connection.execute(
+                text(
+                "UPDATE program_type_parts SET church_id = :church_id "
+                "WHERE church_id IS NULL AND program_type_id IN "
+                "(SELECT id FROM program_types WHERE church_id = :church_id)"
+                ),
+                {"church_id": legacy_church.id},
+            )
+
     with db.engine.begin() as connection:
         connection.exec_driver_sql(
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email ON users (email)"
         )
+        connection.exec_driver_sql(
+            "UPDATE program_types SET display_name = name WHERE display_name IS NULL"
+        )
+        connection.exec_driver_sql(
+            "UPDATE part_types SET display_name = name WHERE display_name IS NULL"
+        )
+
+    if db.engine.dialect.name == "postgresql":
+        part_name_column = next(
+            column for column in inspect(db.engine).get_columns("part_types")
+            if column["name"] == "name"
+        )
+        if getattr(part_name_column["type"], "length", 0) < 100:
+            with db.engine.begin() as connection:
+                connection.exec_driver_sql(
+                    "ALTER TABLE part_types ALTER COLUMN name TYPE VARCHAR(100)"
+                )
+
+    _ensure_scoped_unique_constraint(
+        "programs", ["program_type_id", "program_date"],
+        "uq_program_church_type_date",
+        ["church_id", "program_type_id", "program_date"],
+    )
+    _ensure_scoped_unique_constraint(
+        "monthly_elder_assignments", ["year", "month"],
+        "uq_monthly_elder_church_year_month",
+        ["church_id", "year", "month"],
+    )
+
+
+with app.app_context():
+    db.create_all()
+    migrate_tenant_schema()
     seed_defaults()
 
 if __name__ == "__main__":
