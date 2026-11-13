@@ -9,8 +9,13 @@
     <article class="mt-3 rounded-lg border border-slate-200 bg-white p-6">
         <div class="flex flex-wrap items-start justify-between gap-3">
             <h1 class="text-2xl font-semibold text-slate-900">{{ song.title }}</h1>
-            <a href="{{ url_for('songs', edit=song.id) }}"
-                class="text-sm text-teal-800 hover:underline">Edit lyrics</a>
+            <div class="flex flex-wrap items-center gap-4">
+                <a href="{{ url_for('songs', edit=song.id) }}"
+                    class="text-sm text-teal-800 hover:underline">Edit lyrics</a>
+                <a href="https://www.sdahymnal.org/Search?txtSearchValue0={{ song.title|urlencode }}"
+                    target="_blank" rel="noopener"
+                    class="text-sm text-teal-800 hover:underline">Search in SDA Hymnal &nearr;</a>
+            </div>
         </div>
         <pre class="mt-6 whitespace-pre-wrap break-words font-sans text-sm leading-7 text-slate-700">{{ song.lyrics }}</pre>
     </article>
