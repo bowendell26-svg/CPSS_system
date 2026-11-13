@@ -20,8 +20,8 @@
             </div>
             <div>
                 <label for="username" class="block text-sm font-medium text-slate-700">Username</label>
-                <input id="username" name="username" type="text" required minlength="3" maxlength="50"
-                    value="{{ form.username }}" autocomplete="username"
+                <input id="username" name="username" type="text" minlength="3" maxlength="50"
+                    value="{{ form.username }}" autocomplete="username" placeholder="Leave blank to auto-generate"
                     class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
             </div>
             <div>
@@ -32,12 +32,12 @@
             </div>
             <div>
                 <label for="password" class="block text-sm font-medium text-slate-700">Password</label>
-                <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password"
+                <input id="password" name="password" type="password" minlength="8" autocomplete="new-password" placeholder="Leave blank to auto-generate"
                     class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
             </div>
             <div>
                 <label for="confirm" class="block text-sm font-medium text-slate-700">Confirm password</label>
-                <input id="confirm" name="confirm" type="password" required minlength="8" autocomplete="new-password"
+                <input id="confirm" name="confirm" type="password" minlength="8" autocomplete="new-password" placeholder="Leave blank to auto-generate"
                     class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
             </div>
             <div class="flex items-end">
@@ -46,6 +46,7 @@
                     Create Mission Admin
                 </button>
             </div>
+            <p class="text-xs text-slate-500 sm:col-span-2">Leave the username and both password fields blank to auto-generate them. The generated login details are shown once after the account is created.</p>
         </form>
     </section>
 
