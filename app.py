@@ -589,7 +589,6 @@ def register():
         username = request.form.get("username", "").strip().lower()
         email = request.form.get("email", "").strip().lower()
         church_id = request.form.get("church_id", type=int)
-        code = request.form.get("registration_code", "").strip()
         officer_title = request.form.get("officer_title", "").strip()
         password = request.form.get("password", "")
         confirm = request.form.get("confirm", "")
@@ -615,10 +614,8 @@ def register():
             error = "Please enter a valid email address."
         elif User.query.filter_by(email=email).first():
             error = "That email address is already in use."
-        elif not church or not secrets.compare_digest(
-            code.casefold(), church.registration_code.casefold()
-        ):
-            error = "Choose your church and enter its valid registration code."
+        elif not church:
+            error = "Choose your church."
         elif len(password) < 8:
             error = "Password must be at least 8 characters."
         elif password != confirm:
@@ -948,23 +945,16 @@ def generate_password():
 def validate_church_form(church_id=None):
     name = " ".join(request.form.get("name", "").split())
     district = " ".join(request.form.get("district", "").split())
-    code = request.form.get("registration_code", "").strip().upper()
     error = None
 
     if not name or len(name) > 120:
         error = "Church names must be between 1 and 120 characters."
     elif not district or len(district) > 100:
         error = "District names must be between 1 and 100 characters."
-    elif len(code) > 100:
-        error = "Registration codes must be 100 characters or fewer."
-    elif code and Church.query.filter(
-        db.func.lower(Church.registration_code) == code.lower(),
-        Church.id != (church_id or -1),
-    ).first():
-        error = "That registration code is already assigned to a church."
-    elif not code:
-        # Blangko ang code: awtomatikong gumawa mula sa district at church name.
-        code = generate_church_code(district, name)
+
+    # Hindi na ipinapakita o hinihingi ang registration code; awtomatiko pa
+    # ring gumagawa ng panloob na code para manatiling valid ang mga record.
+    code = "" if error else generate_church_code(district, name)
     return name, district, code, error
 
 
@@ -1020,7 +1010,6 @@ def edit_church(church_id):
         else:
             church.name = name
             church.district = district
-            church.registration_code = code
             db.session.commit()
             flash("Church details updated.", "success")
             return redirect(url_for("churches"))
