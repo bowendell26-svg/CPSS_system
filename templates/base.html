@@ -6,6 +6,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Church Program{% endblock %}</title>
 
+    <!-- Progress bar para sa walang buong page refresh -->
+    <style>
+        #spa-progress {
+            position: fixed;
+            inset: 0 0 auto 0;
+            height: 3px;
+            width: 0;
+            background: #0f766e;
+            opacity: 0;
+            z-index: 100;
+            transition: width 0.25s ease, opacity 0.25s ease;
+        }
+
+        html[data-loading="true"] #spa-progress {
+            width: 85%;
+            opacity: 1;
+        }
+    </style>
+
     <!-- Tailwind CSS (CDN) -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 
@@ -15,6 +34,8 @@
 </head>
 
 <body class="min-h-screen bg-slate-50 text-slate-800">
+
+    <div id="spa-progress" aria-hidden="true"></div>
 
     <!-- ========== MENU SA ITAAS ========== -->
     <header class="border-b border-slate-200 bg-white">
@@ -198,6 +219,149 @@
         });
     </script>
     {% endif %}
+
+    <!-- ========== WALANG BUONG PAGE REFRESH (AJAX navigation) ========== -->
+    <script data-spa-persistent>
+        (function () {
+            if (window.__spaNavInstalled) {
+                return;
+            }
+            window.__spaNavInstalled = true;
+
+            function startLoading() {
+                document.documentElement.dataset.loading = "true";
+            }
+
+            function stopLoading() {
+                delete document.documentElement.dataset.loading;
+            }
+
+            function sameOrigin(url) {
+                return url.origin === window.location.origin;
+            }
+
+            function rerunScripts() {
+                document.querySelectorAll("body script:not([data-spa-persistent])").forEach(function (script) {
+                    var fresh = document.createElement("script");
+                    Array.from(script.attributes).forEach(function (attr) {
+                        fresh.setAttribute(attr.name, attr.value);
+                    });
+                    if (script.src) {
+                        script.replaceWith(fresh);
+                        return;
+                    }
+                    if (!script.textContent.trim()) {
+                        return;
+                    }
+                    // Nakabalot sa function para hindi mag-conflict ang const/let
+                    // kapag paulit-ulit na pinapatakbo pagkatapos ng bawat swap.
+                    fresh.textContent = "(function () {\n" + script.textContent + "\n})();";
+                    script.replaceWith(fresh);
+                });
+            }
+
+            function swapPage(html, url, keepScroll) {
+                var doc = new DOMParser().parseFromString(html, "text/html");
+                document.body.innerHTML = doc.body.innerHTML;
+                document.title = doc.title;
+                rerunScripts();
+                if (!keepScroll) {
+                    window.scrollTo(0, 0);
+                }
+                window.__spaUrl = url;
+            }
+
+            async function load(url, options, keepScroll, push) {
+                startLoading();
+                try {
+                    var response = await fetch(url, Object.assign({ credentials: "same-origin" }, options));
+                    if (!response.ok) {
+                        window.location.href = url;
+                        return;
+                    }
+                    var finalUrl = new URL(response.url);
+                    if (!sameOrigin(finalUrl)) {
+                        window.location.href = finalUrl.href;
+                        return;
+                    }
+                    swapPage(await response.text(), finalUrl.href, keepScroll);
+                    if (push) {
+                        history.pushState({ spa: true }, "", finalUrl.href);
+                    }
+                } catch (error) {
+                    window.location.href = url;
+                } finally {
+                    stopLoading();
+                }
+            }
+
+            document.addEventListener("click", function (event) {
+                if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                    return;
+                }
+                var link = event.target.closest("a[href]");
+                if (!link) {
+                    return;
+                }
+                if (link.target && link.target !== "_self") {
+                    return;
+                }
+                if (link.hasAttribute("download") || link.dataset.noSpa !== undefined) {
+                    return;
+                }
+                var href = link.getAttribute("href");
+                if (!href || href.startsWith("#") || /^(javascript|mailto|tel):/i.test(href)) {
+                    return;
+                }
+                var url = new URL(link.href);
+                if (!sameOrigin(url)) {
+                    return;
+                }
+                if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash) {
+                    return;
+                }
+                event.preventDefault();
+                load(url.href, { method: "GET" }, false, true);
+            });
+
+            document.addEventListener("submit", function (event) {
+                if (event.defaultPrevented) {
+                    return;
+                }
+                var form = event.target;
+                if (!(form instanceof HTMLFormElement)) {
+                    return;
+                }
+                if (form.dataset.noSpa !== undefined) {
+                    return;
+                }
+                if (form.target && form.target !== "_self") {
+                    return;
+                }
+                var method = (form.getAttribute("method") || "get").toLowerCase();
+                var action = new URL(form.getAttribute("action") || window.location.href, window.location.href);
+                if (!sameOrigin(action)) {
+                    return;
+                }
+                event.preventDefault();
+                var data = new FormData(form, event.submitter || undefined);
+                if (method === "post") {
+                    load(action.href, { method: "POST", body: data }, true, true);
+                    return;
+                }
+                var params = new URLSearchParams();
+                data.forEach(function (value, key) {
+                    params.append(key, value);
+                });
+                action.search = params.toString();
+                load(action.href, { method: "GET" }, true, true);
+            });
+
+            window.addEventListener("popstate", function () {
+                load(window.location.href, { method: "GET" }, false, false);
+            });
+        })();
+    </script>
 
 </body>
 
