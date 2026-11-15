@@ -125,6 +125,23 @@ class Member(db.Model):
         return self.display_name or self.full_name
 
 
+class Notification(db.Model):
+    """Isang notification para sa isang user (mission admin o church admin)."""
+    __tablename__ = "notifications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id"), nullable=False, index=True
+    )
+    title = db.Column(db.String(150), nullable=False)
+    body = db.Column(db.String(500))
+    link = db.Column(db.String(255))
+    is_read = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    user = db.relationship("User")
+
+
 class ProgramType(db.Model):
     """Ang uri ng programa: Sabbath School, Wednesday, Friday."""
     __tablename__ = "program_types"
@@ -699,6 +716,16 @@ def register():
                 is_active=False,
             )
             db.session.add(user)
+            db.session.flush()
+            notify_users(
+                User.query.filter_by(
+                    role="mission_admin", is_active=True
+                ).all(),
+                f"New {officer_title} registration",
+                f"{full_name} registered for {church.name} "
+                f"({church.district} District).",
+                url_for("dashboard") + "#registrations",
+            )
             db.session.commit()
             flash(
                 f"Registration submitted as {church.name}'s {officer_title}. "
@@ -1025,6 +1052,22 @@ def validate_church_form(church_id=None):
     return name, district, code, error
 
 
+def notify_users(users, title, body, link=None):
+    """Gumagawa ng notification para sa bawat recipient."""
+    count = 0
+    for user in users:
+        if not user.is_active:
+            continue
+        db.session.add(Notification(
+            user_id=user.id,
+            title=title,
+            body=body,
+            link=link,
+        ))
+        count += 1
+    return count
+
+
 def officers_by_church():
     """Nakatalang Superintendent at Secretary ng bawat church, kasama ang pending."""
     officers = {}
@@ -1190,6 +1233,17 @@ def create_announcement():
                 is_active=True,
             )
             db.session.add(announcement)
+            db.session.flush()
+            notify_users(
+                User.query.filter(
+                    User.role == "church_admin",
+                    User.is_active.is_(True),
+                    User.church_id.isnot(None),
+                ).all(),
+                f"New mission announcement: {title}",
+                content[:200],
+                url_for("dashboard"),
+            )
         db.session.commit()
         flash(
             "Mission announcement updated." if announcement_id
@@ -1217,6 +1271,40 @@ def delete_announcement(announcement_id):
     db.session.commit()
     flash("Announcement deleted.", "success")
     return redirect(url_for("dashboard"))
+
+
+@app.route("/notifications")
+@login_required
+def notifications():
+    items = (
+        Notification.query.filter_by(user_id=current_user.id)
+        .order_by(Notification.is_read, Notification.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    return render_template("notifications.html", notifications=items)
+
+
+@app.route("/notifications/<int:notification_id>/open")
+@login_required
+def open_notification(notification_id):
+    item = db.get_or_404(Notification, notification_id)
+    if item.user_id != current_user.id:
+        abort(404)
+    item.is_read = True
+    db.session.commit()
+    return redirect(item.link or url_for("dashboard"))
+
+
+@app.route("/notifications/read-all", methods=["POST"])
+@login_required
+def read_all_notifications():
+    Notification.query.filter_by(
+        user_id=current_user.id, is_read=False
+    ).update({Notification.is_read: True}, synchronize_session=False)
+    db.session.commit()
+    flash("All notifications marked as read.", "success")
+    return redirect(url_for("notifications"))
 
 
 @app.route("/account/email", methods=["GET", "POST"])
@@ -1294,6 +1382,17 @@ def mission_monitoring_context():
 @mission_admin_required
 def mission_schedule():
     return render_template("mission_schedule.html", **mission_monitoring_context())
+
+
+@app.context_processor
+def inject_unread_notification_count():
+    if current_user.is_authenticated:
+        return {
+            "unread_notification_count": Notification.query.filter_by(
+                user_id=current_user.id, is_read=False
+            ).count()
+        }
+    return {"unread_notification_count": 0}
 
 
 @app.context_processor
