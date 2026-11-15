@@ -1181,72 +1181,88 @@ def logout():
 # 6. DASHBOARD
 # =====================================================================
 
+def mission_monitoring_context():
+    """Context para sa program schedule page ng Mission Admin."""
+    district, church_id, status = mission_filter_values()
+    all_churches = Church.query.order_by(Church.district, Church.name).all()
+    upcoming = (
+        apply_program_filters(
+            Program.query.filter(Program.program_date >= date.today()),
+            district, church_id, status,
+        )
+        .order_by(Program.program_date, Program.id)
+        .all()
+    )
+    all_upcoming = Program.query.filter(
+        Program.program_date >= date.today()
+    ).all()
+    scheduled_church_ids = {program.church_id for program in all_upcoming}
+    summary_churches = [
+        church for church in all_churches
+        if not district or church.district == district
+    ]
+    district_summary = []
+    for district_name in sorted({church.district for church in summary_churches}):
+        district_churches = [
+            church for church in summary_churches
+            if church.district == district_name
+        ]
+        district_summary.append({
+            "name": district_name,
+            "churches": district_churches,
+            "scheduled": sum(
+                church.id in scheduled_church_ids for church in district_churches
+            ),
+            "scheduled_ids": {
+                church.id for church in district_churches
+                if church.id in scheduled_church_ids
+            },
+        })
+    return {
+        "churches": summary_churches,
+        "districts": district_options(),
+        "district_choices": DISTRICTS,
+        "district_filter": district,
+        "church_filter": church_id,
+        "status_filter": status,
+        "upcoming": [(program, count_unassigned(program)) for program in upcoming],
+        "total_programs": len(all_upcoming),
+        "attention_count": sum(
+            count_unassigned(program) > 0 for program in all_upcoming
+        ),
+        "district_summary": district_summary,
+    }
+
+
+@app.route("/mission/schedule")
+@mission_admin_required
+def mission_schedule():
+    return render_template("mission_schedule.html", **mission_monitoring_context())
+
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
     if current_user.role not in ("mission_admin", "church_admin"):
         abort(403)
     if current_user.role == "mission_admin":
-        district, church_id, status = mission_filter_values()
+        context = mission_monitoring_context()
         all_churches = Church.query.order_by(Church.district, Church.name).all()
-        filtered_query = apply_program_filters(
-            Program.query.filter(Program.program_date >= date.today()),
-            district, church_id, status,
+        pending_registrations = (
+            User.query.filter_by(role="church_admin", is_active=False)
+            .order_by(User.created_at, User.id)
+            .all()
         )
-        upcoming = filtered_query.order_by(
-            Program.program_date, Program.id
-        ).all()
-        all_upcoming = Program.query.filter(
-            Program.program_date >= date.today()
-        ).all()
-        attention_count = sum(count_unassigned(program) > 0 for program in all_upcoming)
-        scheduled_church_ids = {program.church_id for program in all_upcoming}
-        summary_churches = [
-            church for church in all_churches
-            if not district or church.district == district
-        ]
-        district_summary = []
-        for district_name in sorted({church.district for church in summary_churches}):
-            district_churches = [
-                church for church in summary_churches
-                if church.district == district_name
-            ]
-            district_summary.append({
-                "name": district_name,
-                "churches": district_churches,
-                "scheduled": sum(
-                    church.id in scheduled_church_ids for church in district_churches
-                ),
-                "scheduled_ids": {
-                    church.id for church in district_churches
-                    if church.id in scheduled_church_ids
-                },
-            })
-        pending_query = User.query.filter_by(role="church_admin", is_active=False)
-        if district:
-            pending_query = pending_query.join(Church).filter(
-                Church.district == district
-            )
-        pending_registrations = pending_query.order_by(
-            User.created_at, User.id
-        ).all()
         return render_template(
             "mission_dashboard.html",
-            churches=summary_churches,
             total_churches=len(all_churches),
+            districts=sorted({church.district for church in all_churches}),
+            total_programs=context["total_programs"],
+            attention_count=context["attention_count"],
             pending_registrations=pending_registrations,
-            districts=district_options(),
-            district_choices=DISTRICTS,
-            district_filter=district,
-            church_filter=church_id,
-            status_filter=status,
-            upcoming=[(program, count_unassigned(program)) for program in upcoming],
-            total_programs=len(all_upcoming),
-            attention_count=attention_count,
             announcements=Announcement.query.order_by(
                 Announcement.is_active.desc(), Announcement.created_at.desc()
             ).all(),
-            district_summary=district_summary,
         )
 
     programs = (

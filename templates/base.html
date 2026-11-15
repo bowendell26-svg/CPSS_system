@@ -109,6 +109,8 @@
             {% if current_user.role == "mission_admin" %}
             <a href="{{ url_for('churches') }}" {% if request.endpoint in ['churches', 'edit_church', 'delete_church'] %}aria-current="page" {% endif %}
                 class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['churches', 'edit_church', 'delete_church'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Churches</a>
+            <a href="{{ url_for('mission_schedule') }}" {% if request.endpoint == 'mission_schedule' %}aria-current="page" {% endif %}
+                class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint == 'mission_schedule' %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Program Schedule</a>
             <a href="{{ url_for('admins') }}" {% if request.endpoint in ['admins', 'delete_admin'] %}aria-current="page" {% endif %}
                 class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['admins', 'delete_admin'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Mission Admins</a>
             {% else %}
