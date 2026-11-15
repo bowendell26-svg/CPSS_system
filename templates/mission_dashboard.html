@@ -23,7 +23,7 @@
     <section aria-label="Mission overview" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p class="text-sm font-medium text-slate-500">Registered churches</p>
-            <p class="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{{ churches|length }}</p>
+            <p class="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{{ total_churches }}</p>
             <p class="mt-1 text-xs text-slate-500">Across all districts</p>
         </article>
         <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -132,6 +132,14 @@
                 <p class="text-sm font-semibold text-teal-700">CHURCH MONITORING</p>
                 <h2 class="mt-1 text-xl font-semibold text-slate-900">Program schedule feed</h2>
             </div>
+            <nav aria-label="District filter" class="flex flex-wrap gap-2">
+                <a href="{{ url_for('dashboard') }}"
+                    class="rounded-xl border px-4 py-2 text-sm font-semibold {% if not district_filter %}border-teal-800 bg-teal-800 text-white{% else %}border-slate-300 bg-white text-slate-700 hover:bg-slate-50{% endif %}">All districts</a>
+                {% for district_name in district_choices %}
+                <a href="{{ url_for('dashboard', district=district_name) }}"
+                    class="rounded-xl border px-4 py-2 text-sm font-semibold {% if district_filter == district_name %}border-teal-800 bg-teal-800 text-white{% else %}border-slate-300 bg-white text-slate-700 hover:bg-slate-50{% endif %}">{{ district_name }} District</a>
+                {% endfor %}
+            </nav>
             <form method="get" action="{{ url_for('dashboard') }}" class="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-2 xl:grid-cols-4">
                 <label class="text-xs font-medium text-slate-600">District
                     <select name="district" class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
@@ -186,7 +194,7 @@
         <aside class="space-y-4">
             <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <p class="text-sm font-semibold text-teal-700">DISTRICT &amp; CHURCH HEALTH</p>
-                <h2 class="mt-1 text-lg font-semibold text-slate-900">Schedule directory</h2>
+                <h2 class="mt-1 text-lg font-semibold text-slate-900">{{ (district_filter ~ " District Churches") if district_filter else "Schedule directory" }}</h2>
                 <div class="mt-4 space-y-4">
                     {% for summary in district_summary %}
                     <div>

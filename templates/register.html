@@ -26,13 +26,23 @@
             <input id="email" name="email" type="email" required maxlength="254" autocomplete="email" value="{{ form.email }}" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
         </div>
         <div>
+            <label for="district" class="block text-sm font-medium text-slate-700">District</label>
+            <select id="district" name="district" required class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                <option value="">Select East or West</option>
+                {% for district_name in districts %}
+                <option value="{{ district_name }}" {% if form.district == district_name %}selected{% endif %}>{{ district_name }} District</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
             <label for="church_id" class="block text-sm font-medium text-slate-700">Local church</label>
             <select id="church_id" name="church_id" required class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
                 <option value="">Select your church</option>
                 {% for church in churches %}
-                <option value="{{ church.id }}" {% if form.church_id == church.id|string %}selected{% endif %}>{{ church.district }} · {{ church.name }}</option>
+                <option value="{{ church.id }}" data-district="{{ church.district }}" {% if form.church_id == church.id|string %}selected{% endif %}>{{ church.name }}</option>
                 {% endfor %}
             </select>
+            <p class="mt-1 text-xs text-slate-500">Only churches in the district you chose are listed.</p>
         </div>
         <div>
             <label for="officer_title" class="block text-sm font-medium text-slate-700">Your position</label>
@@ -59,4 +69,29 @@
     {% endif %}
     <p class="mt-5 text-center text-sm text-slate-600">Already registered? <a href="{{ url_for('login') }}" class="font-medium text-teal-800 hover:underline">Log in</a></p>
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const district = document.getElementById("district");
+    const church = document.getElementById("church_id");
+    if (!district || !church) return;
+    const options = Array.from(church.options);
+    function filterChurches() {
+        const selected = district.value;
+        let hasVisibleSelection = false;
+        options.forEach(function (option) {
+            if (!option.value) return;
+            const matches = !selected || option.dataset.district === selected;
+            option.hidden = !matches;
+            option.disabled = !matches;
+            if (matches && option.selected) hasVisibleSelection = true;
+        });
+        if (!hasVisibleSelection) church.value = "";
+    }
+    district.addEventListener("change", filterChurches);
+    filterChurches();
+})();
+</script>
 {% endblock %}

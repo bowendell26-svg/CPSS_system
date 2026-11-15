@@ -24,7 +24,12 @@
             </div>
             <div>
                 <label for="church-district" class="block text-sm font-medium text-slate-700">District</label>
-                <input id="church-district" name="district" required maxlength="100" value="{{ editing.district if editing else '' }}" placeholder="District name or number" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                <select id="church-district" name="district" required class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                    <option value="">Select East or West</option>
+                    {% for district_name in districts %}
+                    <option value="{{ district_name }}" {% if (editing.district if editing else '') == district_name %}selected{% endif %}>{{ district_name }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="flex items-end gap-2">
                 <button type="submit" class="rounded-lg bg-teal-800 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-900">{{ "Save changes" if editing else "Add church" }}</button>

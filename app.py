@@ -571,6 +571,7 @@ def setup():
 
 
 OFFICER_TITLES = ("Superintendent", "Secretary")
+DISTRICTS = ("East", "West")
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -582,6 +583,7 @@ def register():
         "email": "",
         "church_id": "",
         "officer_title": "",
+        "district": "",
     }
 
     if request.method == "POST":
@@ -589,6 +591,7 @@ def register():
         username = request.form.get("username", "").strip().lower()
         email = request.form.get("email", "").strip().lower()
         church_id = request.form.get("church_id", type=int)
+        district = request.form.get("district", "").strip()
         officer_title = request.form.get("officer_title", "").strip()
         password = request.form.get("password", "")
         confirm = request.form.get("confirm", "")
@@ -598,6 +601,7 @@ def register():
             "email": email,
             "church_id": str(church_id or ""),
             "officer_title": officer_title,
+            "district": district,
         }
         church = db.session.get(Church, church_id) if church_id else None
 
@@ -614,8 +618,10 @@ def register():
             error = "Please enter a valid email address."
         elif User.query.filter_by(email=email).first():
             error = "That email address is already in use."
-        elif not church:
-            error = "Choose your church."
+        elif district not in DISTRICTS:
+            error = "Choose your district: East or West."
+        elif not church or church.district != district:
+            error = "Choose a church in that district."
         elif len(password) < 8:
             error = "Password must be at least 8 characters."
         elif password != confirm:
@@ -651,6 +657,7 @@ def register():
         churches=churches,
         form=form,
         officer_titles=OFFICER_TITLES,
+        districts=DISTRICTS,
     )
 
 
@@ -944,13 +951,17 @@ def generate_password():
 
 def validate_church_form(church_id=None):
     name = " ".join(request.form.get("name", "").split())
-    district = " ".join(request.form.get("district", "").split())
+    district_input = " ".join(request.form.get("district", "").split())
+    district = next(
+        (option for option in DISTRICTS if option.lower() == district_input.lower()),
+        "",
+    )
     error = None
 
     if not name or len(name) > 120:
         error = "Church names must be between 1 and 120 characters."
-    elif not district or len(district) > 100:
-        error = "District names must be between 1 and 100 characters."
+    elif not district:
+        error = "Choose the church's district: East or West."
 
     # Hindi na ipinapakita o hinihingi ang registration code; awtomatiko pa
     # ring gumagawa ng panloob na code para manatiling valid ang mga record.
@@ -969,6 +980,12 @@ def officers_by_church():
     for officer in records:
         officers.setdefault(officer.church_id, []).append(officer)
     return officers
+
+
+def district_options():
+    """East at West, kasama ang anumang lumang district na nasa record pa."""
+    existing = {church.district for church in Church.query.all()}
+    return list(DISTRICTS) + sorted(existing - set(DISTRICTS))
 
 
 @app.route("/churches", methods=["GET", "POST"])
@@ -996,6 +1013,7 @@ def churches():
         "churches.html",
         churches=all_churches,
         church_officers=officers_by_church(),
+        districts=district_options(),
     )
 
 
@@ -1018,6 +1036,7 @@ def edit_church(church_id):
         churches=Church.query.order_by(Church.district, Church.name).all(),
         editing=church,
         church_officers=officers_by_church(),
+        districts=district_options(),
     )
 
 
@@ -1182,10 +1201,15 @@ def dashboard():
         ).all()
         attention_count = sum(count_unassigned(program) > 0 for program in all_upcoming)
         scheduled_church_ids = {program.church_id for program in all_upcoming}
+        summary_churches = [
+            church for church in all_churches
+            if not district or church.district == district
+        ]
         district_summary = []
-        for district_name in sorted({church.district for church in all_churches}):
+        for district_name in sorted({church.district for church in summary_churches}):
             district_churches = [
-                church for church in all_churches if church.district == district_name
+                church for church in summary_churches
+                if church.district == district_name
             ]
             district_summary.append({
                 "name": district_name,
@@ -1198,16 +1222,21 @@ def dashboard():
                     if church.id in scheduled_church_ids
                 },
             })
-        pending_registrations = (
-            User.query.filter_by(role="church_admin", is_active=False)
-            .order_by(User.created_at, User.id)
-            .all()
-        )
+        pending_query = User.query.filter_by(role="church_admin", is_active=False)
+        if district:
+            pending_query = pending_query.join(Church).filter(
+                Church.district == district
+            )
+        pending_registrations = pending_query.order_by(
+            User.created_at, User.id
+        ).all()
         return render_template(
             "mission_dashboard.html",
-            churches=all_churches,
+            churches=summary_churches,
+            total_churches=len(all_churches),
             pending_registrations=pending_registrations,
-            districts=sorted({church.district for church in all_churches}),
+            districts=district_options(),
+            district_choices=DISTRICTS,
             district_filter=district,
             church_filter=church_id,
             status_filter=status,
