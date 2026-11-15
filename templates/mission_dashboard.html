@@ -71,6 +71,8 @@
                     <span class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Pending</span>
                     {% if applicant.verification_status == "matched" %}
                     <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">Qualified to approve</span>
+                    {% elif applicant.verification_status == "position_differs" %}
+                    <span class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Position differs</span>
                     {% elif applicant.verification_status == "name_only" %}
                     <span class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Contact number differs</span>
                     {% else %}
@@ -82,6 +84,8 @@
                 <p class="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
                     {% if applicant.verification_status == "matched" %}
                     Name and contact number match a member record of this church.
+                    {% elif applicant.verification_status == "position_differs" %}
+                    Name and contact number match, but the member record lists a different position. Check the member list before approving.
                     {% elif applicant.verification_status == "name_only" %}
                     The name matches a member record, but the contact number does not. Confirm with the church before approving.
                     {% else %}
