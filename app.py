@@ -114,6 +114,8 @@ class Member(db.Model):
     full_name = db.Column(db.String(100), nullable=False)
     display_name = db.Column(db.String(50))               # maikling pangalan
     contact_number = db.Column(db.String(30))
+    # Superintendent, Secretary, Elder o Regular Member
+    position = db.Column(db.String(30), default="Regular Member")
     is_active = db.Column(db.Boolean, default=True)
 
     @property
@@ -575,6 +577,7 @@ def setup():
 
 OFFICER_TITLES = ("Superintendent", "Secretary")
 DISTRICTS = ("East", "West")
+MEMBER_POSITIONS = ("Superintendent", "Secretary", "Elder", "Regular Member")
 
 
 def normalize_contact(value):
@@ -585,12 +588,13 @@ def normalize_contact(value):
     return digits
 
 
-def detect_officer_record(church, full_name, contact_number):
-    """Ihambing ang pangalan at CP number sa member record ng church.
+def detect_officer_record(church, full_name, contact_number, officer_title):
+    """Ihambing ang pangalan, CP number, at position sa member record.
 
-    "matched"   - pareho ang pangalan at contact number
-    "name_only" - may kaparehong pangalan, iba ang contact number
-    "none"      - walang kaparehong pangalan sa member list
+    "matched"          - tugma ang pangalan, contact number, at position
+    "position_differs" - tugma ang pangalan at CP, iba ang position sa record
+    "name_only"        - may kaparehong pangalan, iba ang contact number
+    "none"             - walang kaparehong pangalan sa member list
     """
     name = " ".join(full_name.split()).casefold()
     contact = normalize_contact(contact_number)
@@ -600,12 +604,21 @@ def detect_officer_record(church, full_name, contact_number):
     ]
     if not same_name:
         return "none"
-    if any(
-        normalize_contact(member.contact_number) == contact
-        for member in same_name
-    ):
+
+    contact_match = [
+        member for member in same_name
+        if normalize_contact(member.contact_number) == contact
+    ]
+    if not contact_match:
+        return "name_only"
+
+    positions = {(member.position or "").strip().casefold() for member in contact_match}
+    if any(not position for position in positions):
+        # Lumang record na walang position: pangalan at CP pa lang ang basehan.
         return "matched"
-    return "name_only"
+    if officer_title.casefold() in positions:
+        return "matched"
+    return "position_differs"
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -681,7 +694,7 @@ def register():
                 officer_title=officer_title,
                 contact_number=contact_number,
                 verification_status=detect_officer_record(
-                    church, full_name, contact_number
+                    church, full_name, contact_number, officer_title
                 ),
                 is_active=False,
             )
@@ -1407,7 +1420,11 @@ def members():
     ).count()
 
     return render_template(
-        "members.html", members=all_members, q=q, active_count=active_count
+        "members.html",
+        members=all_members,
+        q=q,
+        active_count=active_count,
+        member_positions=MEMBER_POSITIONS,
     )
 
 
@@ -1417,6 +1434,9 @@ def add_member():
     full_name = clean_name(request.form.get("full_name", ""))
     display_name = request.form.get("display_name", "").strip()[:50] or None
     contact_number = request.form.get("contact_number", "").strip()[:30] or None
+    position = request.form.get("position", "").strip()
+    if position not in MEMBER_POSITIONS:
+        position = "Regular Member"
 
     if not full_name:
         flash("Please enter the member's full name.", "error")
@@ -1428,6 +1448,7 @@ def add_member():
             full_name=full_name,
             display_name=display_name,
             contact_number=contact_number,
+            position=position,
         ))
         db.session.commit()
         flash(f"{full_name} was added.", "success")
@@ -1444,6 +1465,7 @@ def edit_member(member_id):
         "full_name": member.full_name,
         "display_name": member.display_name or "",
         "contact_number": member.contact_number or "",
+        "position": member.position or "Regular Member",
     }
 
     if request.method == "POST":
@@ -1451,7 +1473,10 @@ def edit_member(member_id):
             "full_name": clean_name(request.form.get("full_name", "")),
             "display_name": request.form.get("display_name", "").strip()[:50],
             "contact_number": request.form.get("contact_number", "").strip()[:30],
+            "position": request.form.get("position", "").strip(),
         }
+        if form["position"] not in MEMBER_POSITIONS:
+            form["position"] = "Regular Member"
 
         if not form["full_name"]:
             flash("Please enter the member's full name.", "error")
@@ -1461,11 +1486,17 @@ def edit_member(member_id):
             member.full_name = form["full_name"]
             member.display_name = form["display_name"] or None
             member.contact_number = form["contact_number"] or None
+            member.position = form["position"]
             db.session.commit()
             flash("Member updated.", "success")
             return redirect(url_for("members"))
 
-    return render_template("member_form.html", member=member, form=form)
+    return render_template(
+        "member_form.html",
+        member=member,
+        form=form,
+        member_positions=MEMBER_POSITIONS,
+    )
 
 
 @app.route("/members/<int:member_id>/toggle", methods=["POST"])
@@ -2313,7 +2344,10 @@ def migrate_tenant_schema():
             "contact_number": "VARCHAR(30)",
             "verification_status": "VARCHAR(20)",
         },
-        "members": {"church_id": "INTEGER REFERENCES churches(id)"},
+        "members": {
+            "church_id": "INTEGER REFERENCES churches(id)",
+            "position": "VARCHAR(30)",
+        },
         "songs": {"church_id": "INTEGER REFERENCES churches(id)"},
         "program_types": {
             "church_id": "INTEGER REFERENCES churches(id)",
