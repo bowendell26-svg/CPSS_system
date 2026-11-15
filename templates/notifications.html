@@ -10,9 +10,14 @@
             <p class="mt-1 text-sm text-slate-600">New registrations and mission announcements appear here.</p>
         </div>
         {% if notifications %}
-        <form method="post" action="{{ url_for('read_all_notifications') }}">
-            <button type="submit" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Mark all as read</button>
-        </form>
+        <div class="flex flex-wrap gap-2">
+            <form method="post" action="{{ url_for('read_all_notifications') }}">
+                <button type="submit" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Mark all as read</button>
+            </form>
+            <form method="post" action="{{ url_for('delete_all_notifications') }}" onsubmit="return confirm('Delete all notifications?');">
+                <button type="submit" class="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">Delete all</button>
+            </form>
+        </div>
         {% endif %}
     </div>
 
@@ -30,10 +35,15 @@
                     {% if item.body %}
                     <p class="mt-1 text-sm leading-6 text-slate-600">{{ item.body }}</p>
                     {% endif %}
-                    {% if item.link %}
-                    <a href="{{ url_for('open_notification', notification_id=item.id) }}"
-                        class="mt-2 inline-block text-sm font-medium text-teal-800 hover:underline">Open</a>
-                    {% endif %}
+                    <div class="mt-2 flex flex-wrap items-center gap-3">
+                        {% if item.link %}
+                        <a href="{{ url_for('open_notification', notification_id=item.id) }}"
+                            class="text-sm font-medium text-teal-800 hover:underline">Open</a>
+                        {% endif %}
+                        <form method="post" action="{{ url_for('delete_notification', notification_id=item.id) }}">
+                            <button type="submit" class="text-sm font-medium text-red-700 hover:underline">Delete</button>
+                        </form>
+                    </div>
                 </div>
             </li>
             {% else %}

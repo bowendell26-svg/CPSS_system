@@ -724,7 +724,7 @@ def register():
                 f"New {officer_title} registration",
                 f"{full_name} registered for {church.name} "
                 f"({church.district} District).",
-                url_for("dashboard") + "#registrations",
+                url_for("registrations"),
             )
             db.session.commit()
             flash(
@@ -1172,6 +1172,19 @@ def delete_church(church_id):
     return redirect(url_for("churches"))
 
 
+@app.route("/registrations")
+@mission_admin_required
+def registrations():
+    pending = (
+        User.query.filter_by(role="church_admin", is_active=False)
+        .order_by(User.created_at, User.id)
+        .all()
+    )
+    return render_template(
+        "pending_registrations.html", pending_registrations=pending
+    )
+
+
 @app.route("/registrations/<int:user_id>/approve", methods=["POST"])
 @mission_admin_required
 def approve_registration(user_id):
@@ -1188,7 +1201,7 @@ def approve_registration(user_id):
             f"{user.church.name}) can now log in.",
             "success",
         )
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("registrations"))
 
 
 @app.route("/registrations/<int:user_id>/reject", methods=["POST"])
@@ -1204,7 +1217,7 @@ def reject_registration(user_id):
         db.session.delete(user)
         db.session.commit()
         flash(f"Registration of {full_name} was rejected and removed.", "success")
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("registrations"))
 
 
 @app.route("/announcements", methods=["POST"])
@@ -1294,6 +1307,29 @@ def open_notification(notification_id):
     item.is_read = True
     db.session.commit()
     return redirect(item.link or url_for("dashboard"))
+
+
+@app.route("/notifications/<int:notification_id>/delete", methods=["POST"])
+@login_required
+def delete_notification(notification_id):
+    item = db.get_or_404(Notification, notification_id)
+    if item.user_id != current_user.id:
+        abort(404)
+    db.session.delete(item)
+    db.session.commit()
+    flash("Notification deleted.", "success")
+    return redirect(url_for("notifications"))
+
+
+@app.route("/notifications/delete-all", methods=["POST"])
+@login_required
+def delete_all_notifications():
+    Notification.query.filter_by(user_id=current_user.id).delete(
+        synchronize_session=False
+    )
+    db.session.commit()
+    flash("All notifications deleted.", "success")
+    return redirect(url_for("notifications"))
 
 
 @app.route("/notifications/read-all", methods=["POST"])
@@ -1415,18 +1451,12 @@ def dashboard():
     if current_user.role == "mission_admin":
         context = mission_monitoring_context()
         all_churches = Church.query.order_by(Church.district, Church.name).all()
-        pending_registrations = (
-            User.query.filter_by(role="church_admin", is_active=False)
-            .order_by(User.created_at, User.id)
-            .all()
-        )
         return render_template(
             "mission_dashboard.html",
             total_churches=len(all_churches),
             districts=sorted({church.district for church in all_churches}),
             total_programs=context["total_programs"],
             attention_count=context["attention_count"],
-            pending_registrations=pending_registrations,
             announcements=Announcement.query.order_by(
                 Announcement.is_active.desc(), Announcement.created_at.desc()
             ).all(),
