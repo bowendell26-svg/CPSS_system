@@ -78,7 +78,20 @@
             </a>
 
             {% if current_user is defined and current_user.is_authenticated %}
-            <details class="relative ml-auto">
+            <div class="ml-auto flex items-center gap-3">
+            <a href="{{ url_for('notifications') }}" aria-label="Notifications" title="Notifications"
+                class="relative flex items-center rounded-md border border-slate-300 p-2 text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                    <path d="M13.7 21a2 2 0 0 1-3.4 0"></path>
+                </svg>
+                {% if unread_notification_count %}
+                <span class="absolute -right-1 -top-1 rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">{{ unread_notification_count }}</span>
+                {% endif %}
+            </a>
+            <details class="relative">
                 <summary aria-label="Account menu"
                     class="flex cursor-pointer list-none items-center rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
@@ -95,6 +108,7 @@
                         class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">Logout</a>
                 </div>
             </details>
+            </div>
             {% endif %}
         </nav>
     </header>
@@ -145,6 +159,13 @@
                 {% endif %}
                 class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['songs', 'song_lyrics'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Songs</a>
             {% endif %}
+            <a href="{{ url_for('notifications') }}" {% if request.endpoint in ['notifications', 'open_notification'] %}aria-current="page" {% endif %}
+                class="flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['notifications', 'open_notification'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">
+                Notifications
+                {% if unread_notification_count %}
+                <span class="rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">{{ unread_notification_count }}</span>
+                {% endif %}
+            </a>
             <a href="{{ url_for('settings') }}" {% if request.endpoint in ['settings', 'account_email' ]
                 %}aria-current="page" {% endif %}
                 class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['settings', 'account_email'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Settings</a>

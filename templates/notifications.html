@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications · Church Program{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-3xl space-y-6">
+    <div class="flex flex-wrap items-end justify-between gap-3">
+        <div>
+            <h1 class="text-2xl font-semibold text-slate-900">Notifications</h1>
+            <p class="mt-1 text-sm text-slate-600">New registrations and mission announcements appear here.</p>
+        </div>
+        {% if notifications %}
+        <form method="post" action="{{ url_for('read_all_notifications') }}">
+            <button type="submit" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Mark all as read</button>
+        </form>
+        {% endif %}
+    </div>
+
+    <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <ul class="divide-y divide-slate-100">
+            {% for item in notifications %}
+            <li class="flex gap-3 px-5 py-4 {% if not item.is_read %}bg-teal-50/50{% endif %}">
+                <span class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full {% if item.is_read %}bg-slate-300{% else %}bg-teal-700{% endif %}" aria-hidden="true"></span>
+                <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <a href="{{ url_for('open_notification', notification_id=item.id) }}"
+                            class="font-semibold text-slate-900 hover:text-teal-800 hover:underline">{{ item.title }}</a>
+                        <time class="text-xs text-slate-500">{{ item.created_at.strftime("%b %d, %Y %H:%M") }}</time>
+                    </div>
+                    {% if item.body %}
+                    <p class="mt-1 text-sm leading-6 text-slate-600">{{ item.body }}</p>
+                    {% endif %}
+                    {% if item.link %}
+                    <a href="{{ url_for('open_notification', notification_id=item.id) }}"
+                        class="mt-2 inline-block text-sm font-medium text-teal-800 hover:underline">Open</a>
+                    {% endif %}
+                </div>
+            </li>
+            {% else %}
+            <li class="px-5 py-10 text-center text-sm text-slate-600">You have no notifications yet.</li>
+            {% endfor %}
+        </ul>
+    </section>
+</div>
+{% endblock %}
