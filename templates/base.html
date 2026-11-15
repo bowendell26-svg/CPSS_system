@@ -135,7 +135,7 @@
         </div>
         <nav class="flex-1 space-y-1 overflow-y-auto p-3">
             <a href="{{ url_for('dashboard') }}" {% if request.endpoint=='dashboard' %}aria-current="page" {% endif %}
-                class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint == 'dashboard' %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Dashboard{% if current_user.role == "mission_admin" and pending_registration_count %} <span class="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{{ pending_registration_count }}</span>{% endif %}</a>
+                class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint == 'dashboard' %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Dashboard</a>
             <a href="{{ url_for('calendar') }}" {% if request.endpoint=='calendar' %}aria-current="page" {% endif %}
                 class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint == 'calendar' %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Calendar</a>
             <a href="{{ url_for('programs') }}" {% if request.endpoint in ['programs', 'new_program' , 'program_detail'
@@ -146,6 +146,13 @@
                 class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['churches', 'edit_church', 'delete_church'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Churches</a>
             <a href="{{ url_for('mission_schedule') }}" {% if request.endpoint == 'mission_schedule' %}aria-current="page" {% endif %}
                 class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint == 'mission_schedule' %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Program Schedule</a>
+            <a href="{{ url_for('registrations') }}" {% if request.endpoint == 'registrations' %}aria-current="page" {% endif %}
+                class="flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint == 'registrations' %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">
+                Pending Registrations
+                {% if pending_registration_count %}
+                <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{{ pending_registration_count }}</span>
+                {% endif %}
+            </a>
             <a href="{{ url_for('admins') }}" {% if request.endpoint in ['admins', 'delete_admin'] %}aria-current="page" {% endif %}
                 class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['admins', 'delete_admin'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Mission Admins</a>
             {% else %}
