@@ -26,6 +26,11 @@
             <input id="email" name="email" type="email" required maxlength="254" autocomplete="email" value="{{ form.email }}" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
         </div>
         <div>
+            <label for="contact_number" class="block text-sm font-medium text-slate-700">Contact number</label>
+            <input id="contact_number" name="contact_number" type="tel" required maxlength="30" autocomplete="tel" value="{{ form.contact_number }}" placeholder="0917 123 4567" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+            <p class="mt-1 text-xs text-slate-500">The Mission Admin checks this against your church's member record.</p>
+        </div>
+        <div>
             <label for="district" class="block text-sm font-medium text-slate-700">District</label>
             <select id="district" name="district" required class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
                 <option value="">Select East or West</option>

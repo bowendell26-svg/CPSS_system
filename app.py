@@ -98,6 +98,9 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True)
     # Superintendent o Secretary; blangko para sa mga lumang account.
     officer_title = db.Column(db.String(20))
+    contact_number = db.Column(db.String(30))
+    # "matched", "name_only" o "none" - resulta ng paghahambing sa members.
+    verification_status = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
 
@@ -574,6 +577,37 @@ OFFICER_TITLES = ("Superintendent", "Secretary")
 DISTRICTS = ("East", "West")
 
 
+def normalize_contact(value):
+    """Digits lang, at 63XXXXXXXXXX ay ginagawang 0XXXXXXXXXX."""
+    digits = "".join(ch for ch in (value or "") if ch.isdigit())
+    if digits.startswith("63") and len(digits) == 12:
+        digits = "0" + digits[2:]
+    return digits
+
+
+def detect_officer_record(church, full_name, contact_number):
+    """Ihambing ang pangalan at CP number sa member record ng church.
+
+    "matched"   - pareho ang pangalan at contact number
+    "name_only" - may kaparehong pangalan, iba ang contact number
+    "none"      - walang kaparehong pangalan sa member list
+    """
+    name = " ".join(full_name.split()).casefold()
+    contact = normalize_contact(contact_number)
+    same_name = [
+        member for member in Member.query.filter_by(church_id=church.id).all()
+        if " ".join(member.full_name.split()).casefold() == name
+    ]
+    if not same_name:
+        return "none"
+    if any(
+        normalize_contact(member.contact_number) == contact
+        for member in same_name
+    ):
+        return "matched"
+    return "name_only"
+
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     churches = Church.query.order_by(Church.district, Church.name).all()
@@ -584,12 +618,14 @@ def register():
         "church_id": "",
         "officer_title": "",
         "district": "",
+        "contact_number": "",
     }
 
     if request.method == "POST":
         full_name = request.form.get("full_name", "").strip()
         username = request.form.get("username", "").strip().lower()
         email = request.form.get("email", "").strip().lower()
+        contact_number = " ".join(request.form.get("contact_number", "").split())
         church_id = request.form.get("church_id", type=int)
         district = request.form.get("district", "").strip()
         officer_title = request.form.get("officer_title", "").strip()
@@ -599,6 +635,7 @@ def register():
             "full_name": full_name,
             "username": username,
             "email": email,
+            "contact_number": contact_number,
             "church_id": str(church_id or ""),
             "officer_title": officer_title,
             "district": district,
@@ -608,6 +645,8 @@ def register():
         error = None
         if not full_name or len(full_name) > 100:
             error = "Enter a full name of 1 to 100 characters."
+        elif not 7 <= len(normalize_contact(contact_number)) <= 15:
+            error = "Enter a valid contact number, e.g. 09171234567."
         elif officer_title not in OFFICER_TITLES:
             error = "Choose whether you are the Superintendent or the Secretary."
         elif len(username) < 3 or len(username) > 50:
@@ -640,6 +679,10 @@ def register():
                 role="church_admin",
                 church_id=church.id,
                 officer_title=officer_title,
+                contact_number=contact_number,
+                verification_status=detect_officer_record(
+                    church, full_name, contact_number
+                ),
                 is_active=False,
             )
             db.session.add(user)
@@ -1238,6 +1281,18 @@ def mission_monitoring_context():
 @mission_admin_required
 def mission_schedule():
     return render_template("mission_schedule.html", **mission_monitoring_context())
+
+
+@app.context_processor
+def inject_pending_registration_count():
+    """Bilang ng pending registrations para sa badge ng Mission Admin."""
+    if current_user.is_authenticated and current_user.role == "mission_admin":
+        return {
+            "pending_registration_count": User.query.filter_by(
+                role="church_admin", is_active=False
+            ).count()
+        }
+    return {"pending_registration_count": 0}
 
 
 @app.route("/dashboard")
@@ -2255,6 +2310,8 @@ def migrate_tenant_schema():
         "users": {
             "church_id": "INTEGER REFERENCES churches(id)",
             "officer_title": "VARCHAR(20)",
+            "contact_number": "VARCHAR(30)",
+            "verification_status": "VARCHAR(20)",
         },
         "members": {"church_id": "INTEGER REFERENCES churches(id)"},
         "songs": {"church_id": "INTEGER REFERENCES churches(id)"},
