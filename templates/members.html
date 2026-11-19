@@ -29,14 +29,6 @@
                 </div>
 
                 <div>
-                    <label for="display_name" class="block text-sm font-medium text-slate-700">Short name <span
-                            class="font-normal text-slate-500">(optional)</span></label>
-                    <input id="display_name" name="display_name" type="text" maxlength="50"
-                        class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
-                    <p class="mt-1 text-xs text-slate-500">Shown on the drag cards and printed programs.</p>
-                </div>
-
-                <div>
                     <label for="contact_number" class="block text-sm font-medium text-slate-700">Contact number <span
                             class="font-normal text-slate-500">(optional)</span></label>
                     <input id="contact_number" name="contact_number" type="text" maxlength="30"
@@ -49,7 +41,8 @@
                     <select id="position" name="position"
                         class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
                         {% for position in member_positions %}
-                        <option value="{{ position }}" {% if position == "Regular Member" %}selected{% endif %}>{{ position }}</option>
+                        <option value="{{ position }}" {% if position=="Regular Member" %}selected{% endif %}>{{
+                            position }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -138,7 +131,8 @@
                         </td>
                         <td class="px-4 py-3 whitespace-nowrap">
                             {% if m.position and m.position != "Regular Member" %}
-                            <span class="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-800">{{ m.position }}</span>
+                            <span class="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-800">{{
+                                m.position }}</span>
                             {% else %}
                             <span class="text-xs text-slate-500">{{ m.position or "Regular Member" }}</span>
                             {% endif %}

@@ -100,10 +100,10 @@
                             <label for="song_search_{{ item.id }}" class="sr-only">Song for {{ item.part_type.label
                                 }}</label>
                             <input id="song_search_{{ item.id }}" name="{{ song_title_field }}" type="text"
-                                autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false"
-                                aria-controls="song_suggestions_{{ item.id }}"
+                                autocomplete="off" maxlength="200" role="combobox" aria-autocomplete="list"
+                                aria-expanded="false" aria-controls="song_suggestions_{{ item.id }}"
                                 value="{{ request.form.get(song_title_field, item.song.title if item.song else item.detail or '') }}"
-                                placeholder="Optional — type a song title"
+                                placeholder="Optional — up to 6 song titles, separated by commas"
                                 class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600"
                                 data-song-search>
                             <input name="{{ song_id_field }}" type="hidden"

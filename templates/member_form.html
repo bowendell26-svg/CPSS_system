@@ -23,13 +23,6 @@
             </div>
 
             <div>
-                <label for="display_name" class="block text-sm font-medium text-slate-700">Short name <span
-                        class="font-normal text-slate-500">(optional)</span></label>
-                <input id="display_name" name="display_name" type="text" maxlength="50" value="{{ form.display_name }}"
-                    class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
-            </div>
-
-            <div>
                 <label for="contact_number" class="block text-sm font-medium text-slate-700">Contact number <span
                         class="font-normal text-slate-500">(optional)</span></label>
                 <input id="contact_number" name="contact_number" type="text" maxlength="30"
@@ -42,7 +35,8 @@
                 <select id="position" name="position"
                     class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
                     {% for position in member_positions %}
-                    <option value="{{ position }}" {% if form.position == position %}selected{% endif %}>{{ position }}</option>
+                    <option value="{{ position }}" {% if form.position==position %}selected{% endif %}>{{ position }}
+                    </option>
                     {% endfor %}
                 </select>
             </div>
