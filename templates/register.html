@@ -1,18 +1,25 @@
 {% extends "base.html" %}
 
-{% block title %}Superintendent &amp; Secretary Sign Up · Church Program{% endblock %}
+{% block title %}Register · Church Program{% endblock %}
 
 {% block content %}
 <section class="mx-auto mt-8 max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
     <div>
         <p class="text-sm font-semibold tracking-wide text-teal-700">LOCAL CHURCH ACCOUNT</p>
-        <h1 class="mt-1 text-2xl font-semibold text-slate-900">Superintendent &amp; Secretary Sign Up</h1>
-        <p class="mt-2 text-sm leading-6 text-slate-600">Only a church's Superintendent or Secretary may hold a local account. Choose your church and your position, then wait for your Mission Admin to verify and approve your registration.</p>
+        <h1 class="mt-1 text-2xl font-semibold text-slate-900">Create an account</h1>
+        <p class="mt-2 text-sm leading-6 text-slate-600">Register as a church officer or regular member. Church Admins review regular-member registrations before access is granted.</p>
     </div>
     {% if not churches %}
     <div class="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Registration is currently unavailable because no churches have been added. Contact your Mission Admin.</div>
     {% else %}
     <form method="post" action="{{ url_for('register') }}" class="mt-6 space-y-4">
+        <div>
+            <label for="account_type" class="block text-sm font-medium text-slate-700">Account type</label>
+            <select id="account_type" name="account_type" required class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+                <option value="church_admin" {% if form.account_type == "church_admin" %}selected{% endif %}>Church Admin (Superintendent or Secretary)</option>
+                <option value="member" {% if form.account_type == "member" %}selected{% endif %}>Regular Member (read-only access)</option>
+            </select>
+        </div>
         <div>
             <label for="full_name" class="block text-sm font-medium text-slate-700">Full name</label>
             <input id="full_name" name="full_name" required maxlength="100" autocomplete="name" value="{{ form.full_name }}" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
@@ -28,7 +35,7 @@
         <div>
             <label for="contact_number" class="block text-sm font-medium text-slate-700">Contact number</label>
             <input id="contact_number" name="contact_number" type="tel" required maxlength="30" autocomplete="tel" value="{{ form.contact_number }}" placeholder="0917 123 4567" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
-            <p class="mt-1 text-xs text-slate-500">The Mission Admin checks this against your church's member record.</p>
+            <p id="contact-hint" class="mt-1 text-xs text-slate-500">{% if form.account_type == "member" %}The Church Admin checks this against your church's member record.{% else %}The Mission Admin checks this against your church's member record.{% endif %}</p>
         </div>
         <div>
             <label for="district" class="block text-sm font-medium text-slate-700">District</label>
@@ -49,9 +56,9 @@
             </select>
             <p class="mt-1 text-xs text-slate-500">Only churches in the district you chose are listed.</p>
         </div>
-        <div>
+        <div id="officer-title-field">
             <label for="officer_title" class="block text-sm font-medium text-slate-700">Your position</label>
-            <select id="officer_title" name="officer_title" required class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
+            <select id="officer_title" name="officer_title" {% if form.account_type == "church_admin" %}required{% endif %} class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
                 <option value="">Select your position</option>
                 {% for title in officer_titles %}
                 <option value="{{ title }}" {% if form.officer_title == title %}selected{% endif %}>{{ title }}</option>
@@ -68,7 +75,7 @@
                 <input id="confirm" name="confirm" type="password" required minlength="8" autocomplete="new-password" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-teal-600 focus:outline-2 focus:outline-teal-600">
             </div>
         </div>
-        <p class="text-xs leading-5 text-slate-500">Your account stays pending until a Mission Admin confirms that you are really this church's Superintendent or Secretary.</p>
+        <p class="text-xs leading-5 text-slate-500">Church Admin accounts require Mission Admin approval. Regular Member accounts require approval from this church's Church Admin.</p>
         <button type="submit" class="w-full rounded-xl bg-teal-800 px-4 py-3 text-sm font-semibold text-white hover:bg-teal-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800">Submit registration for approval</button>
     </form>
     {% endif %}
@@ -81,7 +88,11 @@
 (function () {
     const district = document.getElementById("district");
     const church = document.getElementById("church_id");
-    if (!district || !church) return;
+    const accountType = document.getElementById("account_type");
+    const officerField = document.getElementById("officer-title-field");
+    const officerTitle = document.getElementById("officer_title");
+    const contactHint = document.getElementById("contact-hint");
+    if (!district || !church || !accountType || !officerField || !officerTitle || !contactHint) return;
     const options = Array.from(church.options);
     function filterChurches() {
         const selected = district.value;
@@ -95,8 +106,19 @@
         });
         if (!hasVisibleSelection) church.value = "";
     }
+    function updateAccountFields() {
+        const isChurchAdmin = accountType.value === "church_admin";
+        officerField.hidden = !isChurchAdmin;
+        officerTitle.required = isChurchAdmin;
+        contactHint.textContent = isChurchAdmin
+            ? "The Mission Admin checks this against your church's member record."
+            : "The Church Admin checks this against your church's member record.";
+        if (!isChurchAdmin) officerTitle.value = "";
+    }
     district.addEventListener("change", filterChurches);
+    accountType.addEventListener("change", updateAccountFields);
     filterChurches();
+    updateAccountFields();
 })();
 </script>
 {% endblock %}

@@ -5,10 +5,12 @@
 
 {% block content %}
 <div class="mx-auto max-w-3xl">
-    <a href="{{ url_for('songs') }}" class="text-sm text-teal-800 hover:underline">Back to songs</a>
+    <a href="{{ url_for('songs') }}" data-no-spa class="text-sm text-teal-800 hover:underline">Back to songs</a>
     <div class="flex flex-wrap items-center justify-end gap-4">
+        {% if current_user.role == "church_admin" %}
         <a href="{{ url_for('songs', edit=song.id) }}" class="text-sm text-teal-800 hover:underline">Edit
             lyrics</a>
+        {% endif %}
         <a href="https://www.sdahymnal.org/Search?txtSearchValue0={{ song.title|urlencode }}" target="_blank"
             rel="noopener" class="text-sm text-teal-800 hover:underline">Search in SDA Hymnal &nearr;</a>
     </div>

@@ -14,7 +14,7 @@
         Create program
     </a>
     {% else %}
-    <span class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600">Read-only oversight</span>
+    <span class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600">{{ "Read-only oversight" if current_user.role == "mission_admin" else "Read-only member access" }}</span>
     {% endif %}
 </div>
 
