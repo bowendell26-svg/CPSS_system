@@ -8,9 +8,11 @@ import calendar as calendar_module
 import re
 import secrets
 import smtplib
+import threading
 from functools import wraps
 from email.message import EmailMessage
 from datetime import datetime, date, timedelta
+from urllib.parse import urlsplit
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -33,11 +35,24 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 
+if __name__ == "__main__":
+    # Debug mode para sa direktang python app.py na pagtakbo sa lokal.
+    app.debug = True
+
+
+def get_mail_port():
+    # Hindi dapat sumabog ang app kapag maling MAIL_PORT; gagamit ng 587.
+    try:
+        port = int(os.environ.get("MAIL_PORT", "587"))
+    except (TypeError, ValueError):
+        return 587
+    return port if 1 <= port <= 65535 else 587
+
+
 # Sikretong susi para sa login session. Palitan ito bago i-deploy.
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "palitan-mo-ito-bago-i-deploy")
-app.config["PUBLIC_BASE_URL"] = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
+app.config["PUBLIC_BASE_URL"] = os.environ.get("PUBLIC_BASE_URL", "").strip().rstrip("/")
 app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "")
-app.config["MAIL_PORT"] = int(os.environ.get("MAIL_PORT", "587"))
+app.config["MAIL_PORT"] = get_mail_port()
 app.config["MAIL_USERNAME"] = os.environ.get("MAIL_USERNAME", "")
 app.config["MAIL_PASSWORD"] = os.environ.get("MAIL_PASSWORD", "")
 app.config["MAIL_DEFAULT_SENDER"] = os.environ.get("MAIL_DEFAULT_SENDER", app.config["MAIL_USERNAME"])
@@ -50,6 +65,25 @@ if database_url and database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url or "sqlite:///church.db"
+
+secret_key = os.environ.get("SECRET_KEY", "").strip()
+placeholder_secret = "palitan-mo-ito-bago-i-deploy"
+production_mode = bool(os.environ.get("RENDER")) or bool(database_url) or not app.debug
+
+if not secret_key or secret_key == placeholder_secret:
+    if production_mode:
+        raise RuntimeError(
+            "Set a strong SECRET_KEY in the environment; "
+            "the app cannot start with an empty or placeholder key."
+        )
+    # Lokal lang ang fallback na ito; hindi ito dapat gamitin sa production.
+    app.logger.warning(
+        "SECRET_KEY is empty or using the placeholder; "
+        "using a temporary key for local development."
+    )
+    secret_key = secrets.token_hex(32)
+
+app.config["SECRET_KEY"] = secret_key
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,
@@ -495,6 +529,15 @@ def send_password_reset_email(user, token):
         raise RuntimeError(
             "PUBLIC_BASE_URL, MAIL_SERVER, and MAIL_DEFAULT_SENDER must be configured."
         )
+    public_url = urlsplit(public_base_url)
+    if public_url.scheme not in ("http", "https") or not public_url.netloc:
+        raise RuntimeError("PUBLIC_BASE_URL must be a valid HTTP or HTTPS URL.")
+    try:
+        mail_port = int(app.config["MAIL_PORT"])
+    except (TypeError, ValueError):
+        raise RuntimeError("MAIL_PORT must be an integer between 1 and 65535.")
+    if not 1 <= mail_port <= 65535:
+        raise RuntimeError("MAIL_PORT must be an integer between 1 and 65535.")
     if app.config["MAIL_USE_TLS"] and app.config["MAIL_USE_SSL"]:
         raise RuntimeError("Configure either MAIL_USE_TLS or MAIL_USE_SSL, not both.")
     if app.config["MAIL_USERNAME"] and not (
@@ -517,7 +560,7 @@ def send_password_reset_email(user, token):
     smtp_class = smtplib.SMTP_SSL if app.config["MAIL_USE_SSL"] else smtplib.SMTP
     with smtp_class(
         mail_server,
-        app.config["MAIL_PORT"],
+        mail_port,
         timeout=10,
     ) as smtp:
         if app.config["MAIL_USE_TLS"]:
@@ -685,7 +728,7 @@ def register():
             error = "That username is already in use."
         elif not is_valid_email(email):
             error = "Please enter a valid email address."
-        elif User.query.filter_by(email=email).first():
+        elif User.query.filter(db.func.lower(User.email) == email).first():
             error = "That email address is already in use."
         elif district not in DISTRICTS:
             error = "Choose your district: East or West."
@@ -790,7 +833,7 @@ def forgot_password():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         user = User.query.filter(
-            User.email == email,
+            db.func.lower(User.email) == email,
             User.role.in_(("mission_admin", "church_admin")),
             User.is_active.is_(True),
         ).first()
@@ -2454,14 +2497,23 @@ def _ensure_scoped_unique_constraint(table_name, old_columns, new_constraint, ne
             with db.engine.begin() as connection:
                 if old_constraint:
                     connection.exec_driver_sql(
-                        f"ALTER TABLE {quote(table_name)} "
-                        f"DROP CONSTRAINT {quote(old_constraint['name'])}"
+                        f"ALTER TABLE {quote(table_name)} DROP CONSTRAINT "
+                        f"IF EXISTS {quote(old_constraint['name'])}"
                     )
                 constraint_columns = ", ".join(quote(column) for column in new_columns)
+                # Umiwas sa duplicate-object error kapag sabay na nag-start ang maraming WSGI worker.
                 connection.exec_driver_sql(
-                    f"ALTER TABLE {quote(table_name)} "
-                    f"ADD CONSTRAINT {quote(new_constraint)} "
-                    f"UNIQUE ({constraint_columns})"
+                    f"DO $$ "
+                    f"BEGIN "
+                    f"  IF NOT EXISTS ("
+                    f"    SELECT 1 FROM pg_constraint "
+                    f"    WHERE conname = '{new_constraint}'"
+                    f"  ) THEN "
+                    f"    ALTER TABLE {quote(table_name)} "
+                    f"    ADD CONSTRAINT {quote(new_constraint)} "
+                    f"    UNIQUE ({constraint_columns}); "
+                    f"  END IF; "
+                    f"END $$;"
                 )
 
 
@@ -2494,16 +2546,27 @@ def migrate_tenant_schema():
         },
     }
 
+    inspector = inspect(db.engine)
+    table_names = set(inspector.get_table_names())
     with db.engine.begin() as connection:
         for table_name, additions in column_additions.items():
+            # Huwag gagalaw ng migration kapag wala pang table; db.create_all ang gagawa nito.
+            if table_name not in table_names:
+                continue
             columns = {
-                column["name"] for column in inspect(db.engine).get_columns(table_name)
+                column["name"] for column in inspector.get_columns(table_name)
             }
             for name, definition in additions.items():
                 if name not in columns:
-                    connection.exec_driver_sql(
-                        f"ALTER TABLE {table_name} ADD COLUMN {name} {definition}"
-                    )
+                    if db.engine.dialect.name == "postgresql":
+                        connection.exec_driver_sql(
+                            f"ALTER TABLE {table_name} "
+                            f"ADD COLUMN IF NOT EXISTS {name} {definition}"
+                        )
+                    else:
+                        connection.exec_driver_sql(
+                            f"ALTER TABLE {table_name} ADD COLUMN {name} {definition}"
+                        )
 
     churches_exist = Church.query.first() is not None
     legacy_data_exists = any(
@@ -2617,15 +2680,17 @@ def migrate_tenant_schema():
         )
 
     if db.engine.dialect.name == "postgresql":
-        part_name_column = next(
+        part_name_columns = [
             column for column in inspect(db.engine).get_columns("part_types")
             if column["name"] == "name"
-        )
-        if getattr(part_name_column["type"], "length", 0) < 100:
-            with db.engine.begin() as connection:
-                connection.exec_driver_sql(
-                    "ALTER TABLE part_types ALTER COLUMN name TYPE VARCHAR(100)"
-                )
+        ]
+        if part_name_columns:
+            part_name_column = part_name_columns[0]
+            if getattr(part_name_column["type"], "length", 0) < 100:
+                with db.engine.begin() as connection:
+                    connection.exec_driver_sql(
+                        "ALTER TABLE part_types ALTER COLUMN name TYPE VARCHAR(100)"
+                    )
 
     _ensure_scoped_unique_constraint(
         "programs", ["program_type_id", "program_date"],
@@ -2639,10 +2704,31 @@ def migrate_tenant_schema():
     )
 
 
+_database_initialization_lock = threading.Lock()
+_database_initialized = False
+
+
+def initialize_database():
+    global _database_initialized
+    with _database_initialization_lock:
+        if _database_initialized:
+            return
+        # Dapat unang gumawa ng mga table bago patakbuhin ang migration at seed.
+        db.create_all()
+        migrate_tenant_schema()
+        seed_defaults()
+        db.session.commit()
+        _database_initialized = True
+
+
 with app.app_context():
-    db.create_all()
-    migrate_tenant_schema()
-    seed_defaults()
+    try:
+        initialize_database()
+    except Exception:
+        # Ibalik ang session at itigil ang startup kapag nagkaproblema ang schema o seed.
+        db.session.rollback()
+        app.logger.exception("Database startup initialization failed.")
+        raise
 
 if __name__ == "__main__":
     app.run(debug=True)
