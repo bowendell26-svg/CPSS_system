@@ -649,7 +649,7 @@ def setup():
 
 OFFICER_TITLES = ("Superintendent", "Secretary")
 DISTRICTS = ("East", "West")
-MEMBER_POSITIONS = ("Superintendent", "Secretary", "Elder", "Regular Member")
+MEMBER_POSITIONS = ("Superintendent", "Secretary", "Elder", "Regular Member","Chorister","AY Leader")
 
 
 def normalize_contact(value):
