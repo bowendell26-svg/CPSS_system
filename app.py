@@ -1529,9 +1529,15 @@ def dashboard():
     )
 
     upcoming = [(program, count_unassigned(program)) for program in programs]
+    member_count = Member.query.filter_by(church_id=current_user.church_id).count()
+    active_member_count = Member.query.filter_by(
+        church_id=current_user.church_id, is_active=True
+    ).count()
     return render_template(
         "dashboard.html",
         upcoming=upcoming,
+        member_count=member_count,
+        active_member_count=active_member_count,
         announcements=Announcement.query.filter_by(is_active=True).order_by(
             Announcement.created_at.desc()
         ).all(),
