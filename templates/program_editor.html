@@ -156,12 +156,30 @@
     const songOptions = {{ song_options | tojson }};
 
     function setupAutocomplete(
-        picker, options, searchSelector, hiddenSelector, suggestionSelector, getLabel, onInput, onChoose
+        picker, options, searchSelector, hiddenSelector, suggestionSelector, getLabel, onInput, onChoose,
+        commaSeparated
     ) {
         const searchInput = picker.querySelector(searchSelector);
         const hiddenInput = picker.querySelector(hiddenSelector);
         const suggestions = picker.querySelector(suggestionSelector);
         let activeIndex = -1;
+
+        function getCurrentQuery() {
+            if (!commaSeparated) {
+                return searchInput.value.trim();
+            }
+            const parts = searchInput.value.split(",");
+            return parts[parts.length - 1].trim();
+        }
+
+        function getCompletedTitleCount() {
+            if (!commaSeparated) {
+                return 0;
+            }
+            return searchInput.value.split(",").filter(function (part) {
+                return part.trim();
+            }).length;
+        }
 
         function closeSuggestions() {
             suggestions.classList.add("hidden");
@@ -171,8 +189,18 @@
         }
 
         function chooseOption(option) {
-            searchInput.value = getLabel(option);
-            hiddenInput.value = option.id;
+            if (commaSeparated) {
+                const parts = searchInput.value.split(",");
+                parts[parts.length - 1] = " " + getLabel(option);
+                const normalizedParts = parts
+                    .map(function (part) { return part.trim(); })
+                    .filter(function (part) { return part; });
+                searchInput.value = normalizedParts.join(", ");
+                hiddenInput.value = normalizedParts.length === 1 ? option.id : "";
+            } else {
+                searchInput.value = getLabel(option);
+                hiddenInput.value = option.id;
+            }
             if (onChoose) {
                 onChoose(option);
             }
@@ -191,7 +219,11 @@
         }
 
         function updateSuggestions() {
-            const query = searchInput.value.trim().toLocaleLowerCase();
+            const query = getCurrentQuery().toLocaleLowerCase();
+            if (commaSeparated && getCompletedTitleCount() >= 6) {
+                closeSuggestions();
+                return;
+            }
             const matches = options.filter(function (option) {
                 return getLabel(option).toLocaleLowerCase().includes(query);
             });
@@ -304,7 +336,8 @@
             picker, songOptions, "[data-song-search]", 'input[type="hidden"]',
             "[data-song-suggestions]", function (option) { return option.title; },
             function () { updateLyricsLink(null); },
-            function (option) { updateLyricsLink(option); }
+            function (option) { updateLyricsLink(option); },
+            true
         );
 
         const selectedSong = songOptions.find(function (song) {
