@@ -130,7 +130,7 @@ class Church(db.Model):
 
 
 class User(UserMixin, db.Model):
-    """Account ng admin (ang may login)."""
+    """Login account for a mission admin, church admin, or regular member."""
     __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -140,12 +140,14 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(254))
     role = db.Column(db.String(20), default="church_admin", nullable=False)
     church_id = db.Column(db.Integer, db.ForeignKey("churches.id"))
+    member_id = db.Column(db.Integer, db.ForeignKey("members.id"))
     church = db.relationship("Church")
+    member_record = db.relationship("Member")
     is_active = db.Column(db.Boolean, default=True)
     # Superintendent o Secretary; blangko para sa mga lumang account.
     officer_title = db.Column(db.String(20))
     contact_number = db.Column(db.String(30))
-    # "matched", "name_only" o "none" - resulta ng paghahambing sa members.
+    # Registration check against the church's member roster.
     verification_status = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
@@ -481,6 +483,13 @@ def get_local_or_404(model, record_id):
     ).first_or_404()
 
 
+def songs_by_title_for_church(church_id):
+    songs_by_title = {}
+    for song in Song.query.filter_by(church_id=church_id).order_by(Song.id).all():
+        songs_by_title.setdefault(song.title, song)
+    return songs_by_title
+
+
 def local_program_types():
     return ProgramType.query.filter_by(
         church_id=current_user.church_id
@@ -585,6 +594,21 @@ def send_password_reset_email(user, token):
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
+
+
+@app.before_request
+def enforce_active_member_record():
+    if not current_user.is_authenticated or current_user.role != "member":
+        return
+    member = Member.query.filter_by(
+        id=current_user.member_id,
+        church_id=current_user.church_id,
+        is_active=True,
+    ).first() if current_user.member_id else None
+    if not member:
+        logout_user()
+        flash("Your account no longer has access to an active member record.", "error")
+        return redirect(url_for("login"))
 
 
 # =====================================================================
@@ -693,6 +717,28 @@ def detect_officer_record(church, full_name, contact_number, officer_title):
     return "position_differs"
 
 
+def detect_member_record(church, full_name, contact_number):
+    """Match a regular-member registration against its church roster."""
+    normalized_name = " ".join(full_name.split()).casefold()
+    same_name = [
+        member for member in Member.query.filter_by(church_id=church.id).all()
+        if " ".join(member.full_name.split()).casefold() == normalized_name
+    ]
+    if not same_name:
+        return "none", None
+
+    normalized_phone = normalize_contact(contact_number)
+    phone_matches = [
+        member for member in same_name
+        if normalize_contact(member.contact_number) == normalized_phone
+    ]
+    if not phone_matches:
+        return "name_only", None
+
+    member = sorted(phone_matches, key=lambda match: (not match.is_active, match.id))[0]
+    return ("active_member" if member.is_active else "inactive_member"), member
+
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     churches = Church.query.order_by(Church.district, Church.name).all()
@@ -701,6 +747,7 @@ def register():
         "username": "",
         "email": "",
         "church_id": "",
+        "account_type": "church_admin",
         "officer_title": "",
         "district": "",
         "contact_number": "",
@@ -713,6 +760,7 @@ def register():
         contact_number = " ".join(request.form.get("contact_number", "").split())
         church_id = request.form.get("church_id", type=int)
         district = request.form.get("district", "").strip()
+        account_type = request.form.get("account_type", "").strip()
         officer_title = request.form.get("officer_title", "").strip()
         password = request.form.get("password", "")
         confirm = request.form.get("confirm", "")
@@ -722,6 +770,7 @@ def register():
             "email": email,
             "contact_number": contact_number,
             "church_id": str(church_id or ""),
+            "account_type": account_type,
             "officer_title": officer_title,
             "district": district,
         }
@@ -732,7 +781,9 @@ def register():
             error = "Enter a full name of 1 to 100 characters."
         elif not 7 <= len(normalize_contact(contact_number)) <= 15:
             error = "Enter a valid contact number, e.g. 09171234567."
-        elif officer_title not in OFFICER_TITLES:
+        elif account_type not in ("church_admin", "member"):
+            error = "Choose a valid account type."
+        elif account_type == "church_admin" and officer_title not in OFFICER_TITLES:
             error = "Choose whether you are the Superintendent or the Secretary."
         elif len(username) < 3 or len(username) > 50:
             error = "Username must be between 3 and 50 characters."
@@ -751,8 +802,48 @@ def register():
         elif password != confirm:
             error = "Passwords do not match."
 
+        member_record = None
+        member_status = None
+        if not error and account_type == "member":
+            member_status, member_record = detect_member_record(
+                church, full_name, contact_number
+            )
+            if member_record and User.query.filter_by(
+                role="member", member_id=member_record.id
+            ).first():
+                error = "An account has already been registered for this member."
+
         if error:
             flash(error, "error")
+        elif account_type == "member":
+            user = User(
+                username=username,
+                full_name=full_name,
+                email=email,
+                password_hash=generate_password_hash(password),
+                role="member",
+                church_id=church.id,
+                member_id=member_record.id if member_record else None,
+                contact_number=contact_number,
+                verification_status=member_status,
+                is_active=False,
+            )
+            db.session.add(user)
+            db.session.flush()
+            notify_users(
+                User.query.filter_by(
+                    role="church_admin", church_id=church.id, is_active=True
+                ).all(),
+                "New regular member registration",
+                f"{full_name} requested access to {church.name}.",
+                url_for("member_registrations"),
+            )
+            db.session.commit()
+            flash(
+                f"Registration submitted to {church.name}'s Church Admin for approval.",
+                "success",
+            )
+            return redirect(url_for("login"))
         else:
             # Bagong account: hindi pa makaka-login hangga't hindi ito
             # na-a-approve ng Mission Admin bilang tunay na officer.
@@ -829,11 +920,17 @@ def login():
             and not user.is_active
             and check_password_hash(user.password_hash, password)
         ):
-            flash(
-                "Your registration is waiting for Mission Admin approval. "
-                "Please log in once your account has been approved.",
-                "info",
-            )
+            if user.role == "member":
+                flash(
+                    "Your registration is waiting for your Church Admin's approval.",
+                    "info",
+                )
+            else:
+                flash(
+                    "Your registration is waiting for Mission Admin approval. "
+                    "Please log in once your account has been approved.",
+                    "info",
+                )
         else:
             flash("Invalid username or password.", "error")
 
@@ -846,7 +943,7 @@ def forgot_password():
         email = request.form.get("email", "").strip().lower()
         user = User.query.filter(
             db.func.lower(User.email) == email,
-            User.role.in_(("mission_admin", "church_admin")),
+            User.role.in_(("mission_admin", "church_admin", "member")),
             User.is_active.is_(True),
         ).first()
 
@@ -858,7 +955,7 @@ def forgot_password():
                 app.logger.exception("Unable to send a password reset email.")
 
         flash(
-            "If an active admin account uses that email, password reset instructions will be sent.",
+            "If an active account uses that email, password reset instructions will be sent.",
             "success",
         )
         return redirect(url_for("forgot_password"))
@@ -870,7 +967,7 @@ def forgot_password():
 def reset_password(user_id, token):
     user = db.session.get(User, user_id)
     if not user or not user.is_active or user.role not in (
-        "mission_admin", "church_admin"
+        "mission_admin", "church_admin", "member"
     ) or not user.email:
         flash("This password reset link is invalid or has expired.", "error")
         return redirect(url_for("login"))
@@ -904,6 +1001,34 @@ def reset_password(user_id, token):
 @app.route("/settings", methods=["GET", "POST"])
 @login_required
 def settings():
+    if current_user.role == "member":
+        form = {
+            "full_name": current_user.full_name,
+            "contact_number": current_user.contact_number or "",
+        }
+        if request.method == "POST":
+            full_name = request.form.get("full_name", "").strip()
+            contact_number = " ".join(
+                request.form.get("contact_number", "").split()
+            )
+            form = {
+                "full_name": full_name,
+                "contact_number": contact_number,
+            }
+            if not full_name or len(full_name) > 100:
+                flash("Enter a full name of 1 to 100 characters.", "error")
+            elif not 7 <= len(normalize_contact(contact_number)) <= 15:
+                flash("Enter a valid contact number, e.g. 09171234567.", "error")
+            else:
+                current_user.full_name = full_name
+                current_user.contact_number = contact_number
+                db.session.commit()
+                flash("Profile updated.", "success")
+                return redirect(url_for("settings"))
+        return render_template(
+            "settings.html", form=form, member_profile=True
+        )
+
     form = {
         "full_name": current_user.full_name,
         "username": current_user.username,
@@ -1215,6 +1340,9 @@ def delete_church(church_id):
         synchronize_session=False
     )
     PartType.query.filter_by(church_id=church.id).delete(synchronize_session=False)
+    User.query.filter_by(church_id=church.id).update(
+        {User.member_id: None}, synchronize_session=False
+    )
     Member.query.filter_by(church_id=church.id).delete(synchronize_session=False)
     Song.query.filter_by(church_id=church.id).delete(synchronize_session=False)
     MonthlyElderAssignment.query.filter_by(church_id=church.id).delete(
@@ -1273,6 +1401,80 @@ def reject_registration(user_id):
         db.session.commit()
         flash(f"Registration of {full_name} was rejected and removed.", "success")
     return redirect(url_for("registrations"))
+
+
+@app.route("/member-registrations")
+@church_admin_required
+def member_registrations():
+    pending = (
+        User.query.filter_by(
+            role="member",
+            church_id=current_user.church_id,
+            is_active=False,
+        )
+        .order_by(User.created_at, User.id)
+        .all()
+    )
+    member_checks = {}
+    for applicant in pending:
+        status, member = detect_member_record(
+            current_user.church, applicant.full_name, applicant.contact_number
+        )
+        member_checks[applicant.id] = {"status": status, "member": member}
+    return render_template(
+        "member_registrations.html",
+        pending_registrations=pending,
+        member_checks=member_checks,
+    )
+
+
+@app.route("/member-registrations/<int:user_id>/approve", methods=["POST"])
+@church_admin_required
+def approve_member_registration(user_id):
+    user = User.query.filter_by(
+        id=user_id,
+        role="member",
+        church_id=current_user.church_id,
+    ).first_or_404()
+    status, member = detect_member_record(
+        current_user.church, user.full_name, user.contact_number
+    )
+    if user.is_active:
+        flash("That account is already approved.", "info")
+    elif status != "active_member" or not member:
+        flash(
+            "This applicant does not match an active member record and cannot be approved.",
+            "error",
+        )
+    elif User.query.filter(
+        User.role == "member",
+        User.member_id == member.id,
+        User.id != user.id,
+    ).first():
+        flash("This member already has a registered account.", "error")
+    else:
+        user.member_id = member.id
+        user.verification_status = status
+        user.is_active = True
+        db.session.commit()
+        flash(f"{user.full_name} can now log in as a regular member.", "success")
+    return redirect(url_for("member_registrations"))
+
+
+@app.route("/member-registrations/<int:user_id>/reject", methods=["POST"])
+@church_admin_required
+def reject_member_registration(user_id):
+    user = User.query.filter_by(
+        id=user_id,
+        role="member",
+        church_id=current_user.church_id,
+        is_active=False,
+    ).first_or_404()
+    full_name = user.full_name
+    db.session.delete(user)
+    db.session.commit()
+    flash(f"Registration of {full_name} was rejected and removed.", "success")
+    return redirect(url_for("member_registrations"))
 
 
 @app.route("/announcements", methods=["POST"])
@@ -1498,10 +1700,23 @@ def inject_pending_registration_count():
     return {"pending_registration_count": 0}
 
 
+@app.context_processor
+def inject_pending_member_registration_count():
+    if current_user.is_authenticated and current_user.role == "church_admin":
+        return {
+            "pending_member_registration_count": User.query.filter_by(
+                role="member",
+                church_id=current_user.church_id,
+                is_active=False,
+            ).count()
+        }
+    return {"pending_member_registration_count": 0}
+
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    if current_user.role not in ("mission_admin", "church_admin"):
+    if current_user.role not in ("mission_admin", "church_admin", "member"):
         abort(403)
     if current_user.role == "mission_admin":
         context = mission_monitoring_context()
@@ -1563,7 +1778,7 @@ def mission_filter_values():
 
 
 def apply_program_filters(query, district, church_id, status):
-    if current_user.role == "church_admin":
+    if current_user.role in ("church_admin", "member"):
         query = query.filter(Program.church_id == current_user.church_id)
     elif current_user.role == "mission_admin":
         if district:
@@ -1716,6 +1931,14 @@ def delete_member(member_id):
         },
         synchronize_session=False,
     )
+    User.query.filter_by(member_id=member.id).update(
+        {
+            User.member_id: None,
+            User.is_active: False,
+            User.verification_status: "none",
+        },
+        synchronize_session=False,
+    )
     db.session.delete(member)
     db.session.commit()
     flash(f"{member_name} was removed from this church's member list.", "success")
@@ -1756,8 +1979,12 @@ def import_members():
 
 
 @app.route("/songs", methods=["GET", "POST"])
-@church_admin_required
+@login_required
 def songs():
+    if current_user.role not in ("church_admin", "member") or not current_user.church_id:
+        abort(403)
+    if request.method == "POST" and current_user.role != "church_admin":
+        abort(403)
     selected_song = None
     invalid_song_id = False
     song_id_text = request.form.get("song_id", request.args.get("edit", ""))
@@ -1808,8 +2035,10 @@ def songs():
 
 
 @app.route("/songs/<int:song_id>")
-@church_admin_required
+@login_required
 def song_lyrics(song_id):
+    if current_user.role not in ("church_admin", "member") or not current_user.church_id:
+        abort(403)
     song = get_local_or_404(Song, song_id)
     return render_template("song_lyrics.html", song=song)
 
@@ -2155,6 +2384,10 @@ def calendar():
             month=month_start.month,
         ).first()
 
+    songs_by_title = (
+        songs_by_title_for_church(current_user.church_id)
+        if current_user.role in ("church_admin", "member") else {}
+    )
     return render_template(
         "calendar.html",
         weeks=weeks,
@@ -2164,6 +2397,7 @@ def calendar():
         next_month=next_month,
         programs_by_date=programs_by_date,
         selected_programs=selected_programs,
+        songs_by_title=songs_by_title,
         monthly_elder=monthly_elder,
         districts=sorted({church.district for church in Church.query.all()})
         if current_user.role == "mission_admin" else [],
@@ -2257,10 +2491,10 @@ def new_program():
 @login_required
 def program_detail(program_id):
     program = get_visible_program_or_404(program_id)
-    songs_by_title = {}
-    if current_user.role == "church_admin":
-        for song in Song.query.filter_by(church_id=program.church_id).order_by(Song.id).all():
-            songs_by_title.setdefault(song.title, song)
+    songs_by_title = (
+        songs_by_title_for_church(program.church_id)
+        if current_user.role in ("church_admin", "member") else {}
+    )
     return render_template(
         "program_detail.html",
         program=program,
@@ -2272,7 +2506,7 @@ def program_detail(program_id):
 
 def get_visible_program_or_404(program_id):
     query = Program.query.filter_by(id=program_id)
-    if current_user.role == "church_admin":
+    if current_user.role in ("church_admin", "member"):
         query = query.filter_by(church_id=current_user.church_id)
     elif current_user.role != "mission_admin":
         abort(403)
@@ -2556,6 +2790,7 @@ def migrate_tenant_schema():
     column_additions = {
         "users": {
             "church_id": "INTEGER REFERENCES churches(id)",
+            "member_id": "INTEGER REFERENCES members(id)",
             "officer_title": "VARCHAR(20)",
             "contact_number": "VARCHAR(30)",
             "verification_status": "VARCHAR(20)",
