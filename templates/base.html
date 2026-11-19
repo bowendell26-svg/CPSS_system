@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Church Program{% endblock %}</title>
+    <link rel="icon" type="image/webp" href="{{ url_for('static', filename='logo.webp') }}">
 
     <!-- Progress bar para sa walang buong page refresh -->
     <style>
@@ -79,35 +80,37 @@
 
             {% if current_user is defined and current_user.is_authenticated %}
             <div class="ml-auto flex items-center gap-3">
-            <a href="{{ url_for('notifications') }}" aria-label="Notifications" title="Notifications"
-                class="relative flex items-center rounded-md border border-slate-300 p-2 text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                    aria-hidden="true">
-                    <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                    <path d="M13.7 21a2 2 0 0 1-3.4 0"></path>
-                </svg>
-                {% if unread_notification_count %}
-                <span class="absolute -right-1 -top-1 rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">{{ unread_notification_count }}</span>
-                {% endif %}
-            </a>
-            <details class="relative">
-                <summary aria-label="Account menu"
-                    class="flex cursor-pointer list-none items-center rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
+                <a href="{{ url_for('notifications') }}" aria-label="Notifications" title="Notifications"
+                    class="relative flex items-center rounded-md border border-slate-300 p-2 text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                         aria-hidden="true">
-                        <path d="m6 9 6 6 6-6"></path>
+                        <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                        <path d="M13.7 21a2 2 0 0 1-3.4 0"></path>
                     </svg>
-                </summary>
-                <div
-                    class="absolute right-0 z-10 mt-2 min-w-44 rounded-md border border-slate-200 bg-white py-1 shadow-lg">
-                    <a href="{{ url_for('settings') }}"
-                        class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">Settings</a>
-                    <a href="/logout"
-                        class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">Logout</a>
-                </div>
-            </details>
+                    {% if unread_notification_count %}
+                    <span
+                        class="absolute -right-1 -top-1 rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">{{
+                        unread_notification_count }}</span>
+                    {% endif %}
+                </a>
+                <details class="relative">
+                    <summary aria-label="Account menu"
+                        class="flex cursor-pointer list-none items-center rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            aria-hidden="true">
+                            <path d="m6 9 6 6 6-6"></path>
+                        </svg>
+                    </summary>
+                    <div
+                        class="absolute right-0 z-10 mt-2 min-w-44 rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+                        <a href="{{ url_for('settings') }}"
+                            class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">Settings</a>
+                        <a href="/logout"
+                            class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700">Logout</a>
+                    </div>
+                </details>
             </div>
             {% endif %}
         </nav>
@@ -142,19 +145,26 @@
                 , 'edit_program' , 'edit_program_template' ] %}aria-current="page" {% endif %}
                 class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['programs', 'new_program', 'program_detail', 'edit_program', 'edit_program_template'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Programs</a>
             {% if current_user.role == "mission_admin" %}
-            <a href="{{ url_for('churches') }}" {% if request.endpoint in ['churches', 'edit_church', 'delete_church'] %}aria-current="page" {% endif %}
+            <a href="{{ url_for('churches') }}" {% if request.endpoint in ['churches', 'edit_church' , 'delete_church' ]
+                %}aria-current="page" {% endif %}
                 class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['churches', 'edit_church', 'delete_church'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Churches</a>
-            <a href="{{ url_for('mission_schedule') }}" {% if request.endpoint == 'mission_schedule' %}aria-current="page" {% endif %}
-                class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint == 'mission_schedule' %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Program Schedule</a>
-            <a href="{{ url_for('registrations') }}" {% if request.endpoint == 'registrations' %}aria-current="page" {% endif %}
+            <a href="{{ url_for('mission_schedule') }}" {% if request.endpoint=='mission_schedule' %}aria-current="page"
+                {% endif %}
+                class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint == 'mission_schedule' %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Program
+                Schedule</a>
+            <a href="{{ url_for('registrations') }}" {% if request.endpoint=='registrations' %}aria-current="page" {%
+                endif %}
                 class="flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint == 'registrations' %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">
                 Pending Registrations
                 {% if pending_registration_count %}
-                <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{{ pending_registration_count }}</span>
+                <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{{
+                    pending_registration_count }}</span>
                 {% endif %}
             </a>
-            <a href="{{ url_for('admins') }}" {% if request.endpoint in ['admins', 'delete_admin'] %}aria-current="page" {% endif %}
-                class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['admins', 'delete_admin'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Mission Admins</a>
+            <a href="{{ url_for('admins') }}" {% if request.endpoint in ['admins', 'delete_admin' ]
+                %}aria-current="page" {% endif %}
+                class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['admins', 'delete_admin'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Mission
+                Admins</a>
             {% else %}
             <a href="{{ url_for('new_program') }}"
                 class="block rounded-md px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100">Create
@@ -166,11 +176,13 @@
                 {% endif %}
                 class="block rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['songs', 'song_lyrics'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Songs</a>
             {% endif %}
-            <a href="{{ url_for('notifications') }}" {% if request.endpoint in ['notifications', 'open_notification'] %}aria-current="page" {% endif %}
+            <a href="{{ url_for('notifications') }}" {% if request.endpoint in ['notifications', 'open_notification' ]
+                %}aria-current="page" {% endif %}
                 class="flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium {% if request.endpoint in ['notifications', 'open_notification'] %}bg-teal-50 text-teal-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">
                 Notifications
                 {% if unread_notification_count %}
-                <span class="rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">{{ unread_notification_count }}</span>
+                <span class="rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">{{
+                    unread_notification_count }}</span>
                 {% endif %}
             </a>
             <a href="{{ url_for('settings') }}" {% if request.endpoint in ['settings', 'account_email' ]
