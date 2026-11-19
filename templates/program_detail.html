@@ -150,7 +150,18 @@
                             {% endif %}
                         </td>
                         <td class="px-4 py-3 text-slate-600">
-                            {% if item.song %}
+                            {% if item.part_type.category == "song" and item.detail and current_user.role == "church_admin" %}
+                            {% for title in item.detail.split(",") %}
+                            {% set saved_song = songs_by_title.get(title.strip()) %}
+                            {% if not loop.first %}, {% endif %}
+                            {% if saved_song %}
+                            <a href="{{ url_for('song_lyrics', song_id=saved_song.id) }}"
+                                class="text-teal-800 hover:underline">{{ title.strip() }}</a>
+                            {% else %}
+                            {{ title.strip() }}
+                            {% endif %}
+                            {% endfor %}
+                            {% elif item.song %}
                             {% if current_user.role == "church_admin" %}
                             <a href="{{ url_for('song_lyrics', song_id=item.song.id) }}"
                                 class="text-teal-800 hover:underline">{{ item.song.title }}</a>
