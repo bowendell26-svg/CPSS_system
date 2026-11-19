@@ -191,12 +191,12 @@
         function chooseOption(option) {
             if (commaSeparated) {
                 const parts = searchInput.value.split(",");
-                parts[parts.length - 1] = " " + getLabel(option);
+                parts[parts.length - 1] = getLabel(option);
                 const normalizedParts = parts
                     .map(function (part) { return part.trim(); })
                     .filter(function (part) { return part; });
                 searchInput.value = normalizedParts.join(", ");
-                hiddenInput.value = normalizedParts.length === 1 ? option.id : "";
+                hiddenInput.value = normalizedParts.length === 1 ? String(option.id) : "";
             } else {
                 searchInput.value = getLabel(option);
                 hiddenInput.value = option.id;
@@ -237,6 +237,10 @@
                 button.className = "block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-teal-50";
                 button.textContent = getLabel(option);
                 button.addEventListener("pointerdown", function (event) {
+                    event.preventDefault();
+                    chooseOption(option);
+                });
+                button.addEventListener("click", function (event) {
                     event.preventDefault();
                     chooseOption(option);
                 });
