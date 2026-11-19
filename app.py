@@ -2321,16 +2321,13 @@ def edit_program(program_id):
             is_song_part = item.part_type.category == "song"
             song_title = request.form.get(f"song_title_{item_id}", "").strip()
             song_text = request.form.get(f"song_id_{item_id}", "").strip()
-            detail = (
-                song_title if is_song_part and song_text == ""
-                else request.form.get(f"detail_{item_id}", "").strip()
-            )
+            detail = song_title if is_song_part else request.form.get(f"detail_{item_id}", "").strip()
 
             if len(guest_name) > 100 or (not is_song_part and len(detail) > 200):
                 error = "Guest names must be 100 characters or fewer and details 200 characters or fewer."
                 break
-            if is_song_part and len(song_title) > 150:
-                error = "Song titles must be 150 characters or fewer."
+            if is_song_part and len(song_title) > 200:
+                error = "Song details must be 200 characters or fewer."
                 break
 
             try:
@@ -2339,17 +2336,31 @@ def edit_program(program_id):
                 error = "Please choose a valid song."
                 break
 
-            song = get_local_or_404(Song, song_id) if song_id else None
-            if song_id is not None and (
-                not is_song_part or not song or song.title != song_title
-            ):
-                error = "Please choose a valid song from the suggestions."
-                break
-            if (
-                is_song_part and song_title and song_id is None
-                and song_title != item.detail
-            ):
-                error = "Select a saved song from the suggestions, or add it on the Songs page."
+            song = None
+            if is_song_part:
+                song_titles = [title.strip() for title in song_title.split(",") if title.strip()]
+                if len(song_titles) > 6:
+                    error = "You can enter up to 6 songs."
+                    break
+                if any(len(title) > 150 for title in song_titles):
+                    error = "Each song title must be 150 characters or fewer."
+                    break
+
+                if not song_titles:
+                    song_id = None
+                    detail = None
+                else:
+                    detail = ", ".join(song_titles)
+                    if len(detail) > 200:
+                        error = "Song details must be 200 characters or fewer."
+                        break
+                    if song_id is not None:
+                        song = get_local_or_404(Song, song_id)
+                        if not song or song.title != detail:
+                            song_id = None
+                            song = None
+            elif song_id is not None:
+                error = "Please choose a valid part."
                 break
 
             try:
