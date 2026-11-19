@@ -2257,9 +2257,14 @@ def new_program():
 @login_required
 def program_detail(program_id):
     program = get_visible_program_or_404(program_id)
+    songs_by_title = {}
+    if current_user.role == "church_admin":
+        for song in Song.query.filter_by(church_id=program.church_id).order_by(Song.id).all():
+            songs_by_title.setdefault(song.title, song)
     return render_template(
         "program_detail.html",
         program=program,
+        songs_by_title=songs_by_title,
         statuses=PROGRAM_STATUSES,
         unassigned=count_unassigned(program),
     )
