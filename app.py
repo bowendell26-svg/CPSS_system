@@ -25,7 +25,7 @@ from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
     login_required, current_user
 )
-from sqlalchemy import inspect, text
+from sqlalchemy import event, inspect, text
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
@@ -95,6 +95,18 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
 
 # Ang db ang ginagamit natin para makipag-usap sa database
 db = SQLAlchemy(app)
+
+
+def _disable_psycopg_prepared_statements(dbapi_connection, _):
+    driver_connection = getattr(dbapi_connection, "driver_connection", dbapi_connection)
+    if hasattr(driver_connection, "prepare_threshold"):
+        driver_connection.prepare_threshold = None
+
+
+if database_url and database_url.startswith("postgresql"):
+    with app.app_context():
+        event.listen(db.engine, "connect", _disable_psycopg_prepared_statements)
+
 
 # Ang LoginManager ang nagbabantay kung sino ang naka-login
 login_manager = LoginManager(app)
@@ -2507,7 +2519,8 @@ def _ensure_scoped_unique_constraint(table_name, old_columns, new_constraint, ne
                     f"BEGIN "
                     f"  IF NOT EXISTS ("
                     f"    SELECT 1 FROM pg_constraint "
-                    f"    WHERE conname = '{new_constraint}'"
+                    f"    WHERE conname = '{new_constraint}' "
+                    f"    AND conrelid = '{table_name}'::regclass"
                     f"  ) THEN "
                     f"    ALTER TABLE {quote(table_name)} "
                     f"    ADD CONSTRAINT {quote(new_constraint)} "
